@@ -200,6 +200,18 @@ const TYPES=['上衣','襯衫','針織/毛衣','外套','褲子','裙子','洋�
 const LOWER_TYPES=['褲子','裙子'];
 const SKIRT_TYPES=['裙子','洋裝'];
 const SEASONS=['春','夏','秋','冬'];
+const SIZES=['F','XXS','XS','S','M','L','XL','XXL'];
+/* Claude 標註匯入用：常見說法 → 內建類型 */
+const TYPE_ALIASES={'連身裙':'洋裝','連衣裙':'洋裝','洋裝':'洋裝','T恤':'上衣','背心':'上衣','無袖':'上衣',
+ 'polo':'上衣','帽T':'上衣','衛衣':'上衣','毛衣':'針織/毛衣','針織':'針織/毛衣','大衣':'外套','風衣':'外套',
+ '夾克':'外套','羽絨':'外套','西裝外套':'外套','牛仔褲':'褲子','長褲':'褲子','短褲':'褲子','寬褲':'褲子','裙':'裙子'};
+function normType(t){
+  if(!t)return'';t=String(t).trim();
+  if(TYPES.includes(t))return t;
+  for(const k in TYPE_ALIASES)if(t.includes(k))return TYPE_ALIASES[k];
+  for(const T of TYPES)if(t.includes(T)||T.includes(t))return T;
+  return'';
+}
 /* 0 = 都可以（百搭／不確定）：讓使用者永遠不必勉強分類，配套時視為萬用、任何場合都合 */
 const FORMALITY=[[0,'🤷 都可以'],[1,'很休閒'],[2,'休閒'],[3,'半正式(商務休閒)'],[4,'正式'],[5,'很正式']];
 const SCENES=['上班','約會','運動','休閒','出遊','其他'];
@@ -346,6 +358,17 @@ function openModal(html,onClose){
 function closeModal(){$('modalRoot').innerHTML='';document.body.style.overflow='';
   if(window._modalOnClose){const f=window._modalOnClose;window._modalOnClose=null;f()}}
 
+/* 尺寸 chips（點選＝填入對應輸入框；再點一次取消） */
+function sizeChipsHtml(inputId,current){
+  return `<div class="chipsel" style="margin:2px 0 4px">${SIZES.map(s=>
+    `<button class="c ${current===s?'on':''}" onclick="sizePick(this,'${inputId}','${s}')">${s}</button>`).join('')}</div>`;
+}
+function sizePick(btn,inputId,s){
+  const inp=$(inputId);if(!inp)return;
+  if(inp.value===s){inp.value='';btn.classList.remove('on')}
+  else{inp.value=s;[...btn.parentElement.children].forEach(b=>b.classList.remove('on'));btn.classList.add('on')}
+}
+
 /* =====================================================================
    分頁 1：衣櫃
    ===================================================================== */
@@ -434,14 +457,23 @@ function addFlowStart(){
 function addTagModal(draft){
   const q=addQueue[addIdx];
   if(!q){closeModal();return}
-  const d=draft||{type:'',seasons:[],formality:0,fav:false,name:'',brand:'',size:'',
-    colorName:q.colorName,colorHex:q.colorHex};
+  /* 若有貼過 Claude 標註（q.preset），預填進草稿，使用者確認即可 */
+  const p=q.preset||{};
+  const pColorOk=COLOR_NAMES.some(([n])=>n===p.colorName);
+  const d=draft||{
+    type:normType(p.type)||'',
+    seasons:Array.isArray(p.seasons)?p.seasons.filter(s=>SEASONS.includes(s)):[],
+    formality:(typeof p.formality==='number'&&p.formality>=0&&p.formality<=5)?p.formality:0,
+    fav:!!p.fav,name:p.name||'',brand:p.brand||'',size:p.size||'',
+    colorName:pColorOk?p.colorName:q.colorName,
+    colorHex:(pColorOk&&p.colorName!==q.colorName)?colorNameToHex(p.colorName):q.colorHex};
   window._addDraft=d;
   if(window._addUrl)URL.revokeObjectURL(window._addUrl); /* 回收上一張的 objectURL */
   const url=window._addUrl=URL.createObjectURL(q.photo);
   openModal(`
     <button class="close" onclick="closeModal()">✕</button>
-    <h2>快速標註 <span class="tag">${addIdx+1} / ${addQueue.length}</span></h2>
+    <h2>快速標註 <span class="tag">${addIdx+1} / ${addQueue.length}</span>
+      <button class="icon" style="float:right;margin-right:34px" onclick="labelPasteModal()">📋 貼上 Claude 標註</button></h2>
     <img class="pv" src="${url}" style="max-height:200px">
     <p class="hint" style="margin:6px 0">主色自動判定：<span class="dot" style="background:${esc(d.colorHex)}"></span>
       <select id="adColor" style="min-width:80px;padding:4px 8px;font-size:13px">
@@ -457,10 +489,12 @@ function addTagModal(draft){
       <span class="hint" style="font-size:12px"> · 不知道就留「🤷 都可以」，配套照樣能用</span>
       <div class="chipsel">${FORMALITY.map(([v,l])=>`<button class="c ${d.formality===v?'on':''}"
         onclick="_addDraft.formality=${v};addChipRefresh(this,'formality')">${l}</button>`).join('')}</div></div>
+    <div><b style="font-size:13px;color:var(--muted)">尺寸（點選；特殊尺寸可自打）</b>
+      ${sizeChipsHtml('adSize',d.size)}</div>
     <div class="row" style="margin:6px 0 12px">
       <label class="field">名稱（可空白）<input type="text" id="adName" placeholder="例：深藍直條紋襯衫" value="${esc(d.name)}"></label>
       <label class="field">品牌<input type="text" id="adBrand" style="min-width:90px" value="${esc(d.brand)}"></label>
-      <label class="field">尺寸<input type="text" id="adSize" style="min-width:60px;width:70px" value="${esc(d.size)}"></label>
+      <label class="field">自訂尺寸<input type="text" id="adSize" style="min-width:60px;width:70px" value="${esc(d.size)}"></label>
       <label class="switch"><input type="checkbox" id="adFav" ${d.fav?'checked':''}>⭐ 最愛</label>
     </div>
     <div class="row">
@@ -485,6 +519,11 @@ async function addSaveOne(){
   let[tmin,tmax]=preset;
   if(d.seasons.length&&!d.seasons.includes('夏')&&d.seasons.includes('冬'))tmax=Math.min(tmax,20);
   if(d.seasons.length&&!d.seasons.includes('冬')&&d.seasons.includes('夏'))tmin=Math.max(tmin,18);
+  /* Claude 標註若直接給了適穿溫度，優先採用 */
+  const pp=q.preset||{};
+  if(typeof pp.tempMin==='number')tmin=pp.tempMin;
+  if(typeof pp.tempMax==='number')tmax=pp.tempMax;
+  if(tmin>tmax)[tmin,tmax]=[tmax,tmin];
   const it={id:uid(),name:$('adName').value.trim(),type:d.type,seasons:d.seasons.slice(),
     formality:d.formality,fav:$('adFav').checked,brand:$('adBrand').value.trim(),
     size:$('adSize').value.trim(),colorHex:d.colorHex,colorName,
@@ -499,6 +538,35 @@ function addSkipOne(){addIdx++;
   if(addIdx<addQueue.length)addTagModal();
   else{closeModal();addQueue=[];render();toast('匯入結束')}}
 
+/* ---------------- 貼上 Claude 標註（半自動：把照片丟給 Claude 問，貼回 JSON 一次預填） ---------------- */
+function labelPasteModal(){
+  openModal(`
+    <button class="close" onclick="addTagModal()">✕</button>
+    <h2>📋 貼上 Claude 標註</h2>
+    <p class="hint">把照片丟進 Claude 對話，請它「依照片順序輸出每件的
+      type／colorName／seasons／formality／size／name 的 JSON 陣列」，再整段貼進來。
+      會依<b>選照片的順序</b>一一對應預填，你只要逐張確認按儲存。</p>
+    <textarea id="labelTa" style="min-height:140px" placeholder='[{"name":"米白無袖上衣","type":"上衣","colorName":"米/杏","seasons":["夏"],"formality":0,"size":"F"}]'></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn accent" onclick="labelApply()">套用到這批照片</button>
+      <button class="btn ghost" onclick="addTagModal()">返回</button>
+    </div>`);
+}
+function labelApply(){
+  let arr;
+  try{
+    let txt=$('labelTa').value.trim();
+    /* 容錯：Claude 回覆常包 ```json ``` */
+    txt=txt.replace(/^```(json)?/i,'').replace(/```$/,'').trim();
+    arr=JSON.parse(txt);
+    if(!Array.isArray(arr))throw new Error('要是陣列');
+  }catch(e){toast('看不懂這段 JSON：'+(e.message||''),3600);return}
+  const n=Math.min(arr.length,addQueue.length);
+  for(let i=0;i<n;i++){if(arr[i]&&typeof arr[i]==='object')addQueue[i].preset=arr[i]}
+  toast(`已套用 ${n} 筆標註${arr.length!==addQueue.length?`（照片 ${addQueue.length} 張、標註 ${arr.length} 筆，依序對應）`:''}`,3600);
+  addTagModal(); /* 重建當前這張的草稿（會吃進 preset） */
+}
+
 /* ---------------- 單品詳情 ---------------- */
 function openItem(id){
   const it=itemById(id);if(!it)return;
@@ -510,6 +578,7 @@ function openItem(id){
     <img class="pv" src="${url}">
     <div class="row" style="margin:10px 0">
       ${it.photo&&!it.cut?`<button class="btn accent sm" onclick="bgSingle('${it.id}')">🪄 自動去背</button>`:''}
+      ${it.cut?`<button class="btn ghost sm" onclick="itemEditCut('${it.id}')">🧽 修去背（擦手/衣架）</button>`:''}
       ${it.cut&&it.photo?`<button class="btn ghost sm" onclick="itemDropOrig('${it.id}')">刪原圖省空間</button>`:''}
       <button class="btn ghost sm" onclick="itemImportCut('${it.id}')">匯入去背 PNG</button>
       <button class="btn ghost sm" onclick="itemReplacePhoto('${it.id}')">換照片</button>
@@ -530,9 +599,10 @@ function openItem(id){
           <input type="number" id="itTmax" value="${it.tempMax}"></span></label>
       <label class="switch"><input type="checkbox" id="itFav" ${it.fav?'checked':''}>⭐ 最愛</label>
     </div>
+    <div><b style="font-size:13px;color:var(--muted)">尺寸</b>${sizeChipsHtml('itSize',it.size)}</div>
     <div class="row" style="margin-bottom:8px">
       <label class="field">品牌<input type="text" id="itBrand" value="${esc(it.brand)}" style="min-width:100px"></label>
-      <label class="field">尺寸<input type="text" id="itSize" value="${esc(it.size)}" style="min-width:60px;width:80px"></label>
+      <label class="field">自訂尺寸<input type="text" id="itSize" value="${esc(it.size)}" style="min-width:60px;width:80px"></label>
       <label class="field">穿著次數
         <span class="rangewrap">
           <button class="icon" onclick="itWear('${it.id}',-1)">－</button>
@@ -694,6 +764,7 @@ function bgPreviewConfirm(results,idx){
       <input type="checkbox" id="bgKeepOrig" ${SET.keepOriginal?'checked':''}>採用後仍保留原圖（較占空間）</label>
     <div class="row" style="margin-top:10px">
       <button class="btn ok" onclick="bgApplyOne(${idx})">✔ 採用去背圖</button>
+      <button class="btn ghost" onclick="bgEditCut(${idx})">🧽 先修一下（擦手/衣架）</button>
       <button class="btn ghost" onclick="bgSkipPrev(${idx})">✘ 不採用，保留原圖</button>
     </div>`);
   window._bgResults=results;
@@ -710,6 +781,77 @@ async function bgApplyOne(idx){
   bgPreviewConfirm(results,idx+1);
 }
 function bgSkipPrev(idx){bgPreviewConfirm(window._bgResults,idx+1)}
+
+/* =====================================================================
+   🧽 去背橡皮擦：手動擦掉手、衣架、殘留背景（觸控＋滑鼠）
+   ===================================================================== */
+let ecState=null;
+async function editCutOpen(blob,onDone,onCancel){
+  const bmp=await createImageBitmap(blob);
+  openModal(`
+    <h2>🧽 修去背：把不要的擦掉</h2>
+    <p class="hint">手指／滑鼠塗抹要擦掉的地方（手、衣架、殘留背景）。擦錯按「全部還原」重來。</p>
+    <canvas id="ecCanvas" style="width:100%;max-height:56vh;touch-action:none;border:1px solid var(--line);
+      border-radius:8px;background:repeating-conic-gradient(#f3f5f4 0 25%,#e9edeb 0 50%) 0 0/16px 16px"></canvas>
+    <div class="row" style="margin:10px 0;align-items:center">
+      <label class="field" style="flex:1">筆刷大小
+        <input type="range" id="ecBrush" min="8" max="80" value="26" style="width:100%"></label>
+      <button class="btn ghost sm" onclick="ecRestore()">全部還原</button>
+    </div>
+    <div class="row">
+      <button class="btn ok" onclick="ecFinish()">✔ 完成</button>
+      <button class="btn ghost" onclick="ecCancel()">取消</button>
+    </div>`);
+  const c=$('ecCanvas');
+  c.width=bmp.width;c.height=bmp.height;
+  /* 高度不超過畫面：由 CSS 控制顯示大小，內部維持原解析度 */
+  const ctx=c.getContext('2d');
+  ctx.drawImage(bmp,0,0);
+  ecState={c,ctx,bmp,onDone,onCancel,down:false};
+  const eraseAt=e=>{
+    const r=c.getBoundingClientRect();
+    const sx=c.width/r.width,sy=c.height/r.height;
+    const x=(e.clientX-r.left)*sx,y=(e.clientY-r.top)*sy;
+    const rad=(+$('ecBrush').value||26)*Math.max(sx,sy);
+    ctx.save();ctx.globalCompositeOperation='destination-out';
+    ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fill();ctx.restore();
+  };
+  c.addEventListener('pointerdown',e=>{ecState.down=true;c.setPointerCapture(e.pointerId);eraseAt(e);e.preventDefault()});
+  c.addEventListener('pointermove',e=>{if(ecState&&ecState.down)eraseAt(e)});
+  c.addEventListener('pointerup',()=>{if(ecState)ecState.down=false});
+  c.addEventListener('pointercancel',()=>{if(ecState)ecState.down=false});
+}
+function ecRestore(){
+  if(!ecState)return;
+  const{ctx,c,bmp}=ecState;
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.drawImage(bmp,0,0);
+}
+function ecFinish(){
+  if(!ecState)return;
+  const{c,bmp,onDone}=ecState;
+  c.toBlob(b=>{bmp.close&&bmp.close();const done=onDone;ecState=null;done(b)},'image/png');
+}
+function ecCancel(){
+  if(!ecState)return;
+  const{bmp,onCancel}=ecState;
+  bmp.close&&bmp.close();const cb=onCancel;ecState=null;cb();
+}
+/* 去背預覽中開橡皮擦 */
+function bgEditCut(idx){
+  const results=window._bgResults;const r=results[idx];
+  editCutOpen(r.cut,
+    blob=>{r.cut=blob;bgPreviewConfirm(results,idx)},   /* 存改後回預覽 */
+    ()=>bgPreviewConfirm(results,idx));
+}
+/* 單品詳情開橡皮擦（已採用的去背圖） */
+function itemEditCut(id){
+  const it=itemById(id);if(!it||!it.cut)return;
+  editCutOpen(it.cut,
+    async blob=>{it.cut=await compressImage(blob,600,true);
+      urlCache.drop(id);await saveItem(it);openItem(id);render();toast('去背圖已更新')},
+    ()=>openItem(id));
+}
 
 /* =====================================================================
    分頁 2：搭配（outfit）
