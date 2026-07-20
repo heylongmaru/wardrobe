@@ -90,7 +90,38 @@ th{font-size:12px;color:var(--muted);font-weight:700}
   opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:200;max-width:90vw}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:560px){.grid{grid-template-columns:1fr}header.app h1{font-size:19px}}
+/* ---- 防橫向溢出（手機） ---- */
+html,body{overflow-x:hidden}
+img,canvas,video{max-width:100%}
+.row>*,.filterbar>*{max-width:100%}
+label.field{min-width:0}
+select{max-width:100%}
+@media(max-width:560px){
+  .grid{grid-template-columns:1fr}
+  header.app h1{font-size:19px}
+  header.app{gap:6px;padding:4px 2px 12px;margin-bottom:10px}
+  header.app .sub{font-size:12px}
+  .wrap{padding:14px 10px 96px}
+  .card{padding:14px 12px;margin-bottom:12px}
+  .tabs{gap:5px;margin:0 0 12px}
+  .tab{padding:8px 12px;font-size:14px}
+  .row{gap:8px}
+  .filterbar{gap:6px}
+  .filterbar select,.filterbar input{font-size:13px;padding:6px 8px}
+  button.btn,.btn{font-size:14px;padding:9px 14px}
+  .btn.sm{font-size:13px;padding:6px 10px}
+  .chipsel .c{padding:5px 11px;font-size:13px}
+  .modal{padding:14px 12px 34px}
+  input[type=text],input[type=date],input[type=number],select,textarea{min-width:0;font-size:16px} /* 16px 防 iOS 自動放大 */
+  .dayrow .d{min-width:84px;font-size:14px}
+  .dayrow .w{min-width:0;font-size:12.5px}
+  .kpi{gap:14px}
+  .kpi div b{font-size:19px}
+  .outfitcard{padding:10px;gap:9px}
+  .outfitcard .thumbs img{width:38px;height:48px}
+  .itemgrid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+  th,td{padding:7px 6px;font-size:13px}
+}
 @media print{.tabs,.no-print,header.app .sub{display:none!important}body{background:#fff}
   .card{box-shadow:none;border-color:#ccc}}
 
@@ -164,7 +195,7 @@ th{font-size:12px;color:var(--muted);font-weight:700}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>👗 衣櫃穿搭</h1>
+    <h1>👗 衣櫃穿搭 <span class="tag">v1.4</span></h1>
     <span class="sub">出國打包選衣 × 日常穿搭 · 資料只存在這台裝置</span>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -472,9 +503,9 @@ function addTagModal(draft){
   const url=window._addUrl=URL.createObjectURL(q.photo);
   openModal(`
     <button class="close" onclick="closeModal()">✕</button>
-    <h2>快速標註 <span class="tag">${addIdx+1} / ${addQueue.length}</span>
-      <button class="icon" style="float:right;margin-right:34px" onclick="labelPasteModal()">📋 貼上 Claude 標註</button></h2>
-    <img class="pv" src="${url}" style="max-height:200px">
+    <h2>快速標註 <span class="tag">${addIdx+1} / ${addQueue.length}</span></h2>
+    <div style="margin:0 0 6px"><button class="icon" onclick="labelPasteModal()">📋 貼上 Claude 標註（整批預填）</button></div>
+    <img class="pv" src="${url}" style="max-height:180px">
     <p class="hint" style="margin:6px 0">主色自動判定：<span class="dot" style="background:${esc(d.colorHex)}"></span>
       <select id="adColor" style="min-width:80px;padding:4px 8px;font-size:13px">
         ${COLOR_NAMES.map(([n])=>`<option ${d.colorName===n?'selected':''}>${n}</option>`).join('')}
@@ -786,17 +817,22 @@ function bgSkipPrev(idx){bgPreviewConfirm(window._bgResults,idx+1)}
    🧽 去背橡皮擦：手動擦掉手、衣架、殘留背景（觸控＋滑鼠）
    ===================================================================== */
 let ecState=null;
-async function editCutOpen(blob,onDone,onCancel){
+async function editCutOpen(blob,onDone,onCancel,origBlob){
   const bmp=await createImageBitmap(blob);
+  const origBmp=origBlob?await createImageBitmap(origBlob):null;
   openModal(`
-    <h2>🧽 修去背：把不要的擦掉</h2>
-    <p class="hint">手指／滑鼠塗抹要擦掉的地方（手、衣架、殘留背景）。擦錯按「全部還原」重來。</p>
-    <canvas id="ecCanvas" style="width:100%;max-height:56vh;touch-action:none;border:1px solid var(--line);
+    <h2>🧽 修圖</h2>
+    <p class="hint">「擦除」塗掉不要的（手、衣架、殘留背景）；${origBmp?'「補回」把被誤吃掉的衣服刷回來；':''}擦壞了按「全部重來」。</p>
+    <div class="subtabs" style="margin-bottom:8px">
+      <button class="subtab active" id="ecModeErase" onclick="ecSetMode('erase')">🧽 擦除</button>
+      ${origBmp?'<button class="subtab" id="ecModeRestore" onclick="ecSetMode(\'restore\')">🩹 補回</button>':''}
+    </div>
+    <canvas id="ecCanvas" style="width:100%;max-height:52vh;touch-action:none;border:1px solid var(--line);
       border-radius:8px;background:repeating-conic-gradient(#f3f5f4 0 25%,#e9edeb 0 50%) 0 0/16px 16px"></canvas>
     <div class="row" style="margin:10px 0;align-items:center">
       <label class="field" style="flex:1">筆刷大小
         <input type="range" id="ecBrush" min="8" max="80" value="26" style="width:100%"></label>
-      <button class="btn ghost sm" onclick="ecRestore()">全部還原</button>
+      <button class="btn ghost sm" onclick="ecRestore()">全部重來</button>
     </div>
     <div class="row">
       <button class="btn ok" onclick="ecFinish()">✔ 完成</button>
@@ -804,22 +840,38 @@ async function editCutOpen(blob,onDone,onCancel){
     </div>`);
   const c=$('ecCanvas');
   c.width=bmp.width;c.height=bmp.height;
-  /* 高度不超過畫面：由 CSS 控制顯示大小，內部維持原解析度 */
+  /* 顯示大小由 CSS 控制；內部維持原解析度 */
   const ctx=c.getContext('2d');
   ctx.drawImage(bmp,0,0);
-  ecState={c,ctx,bmp,onDone,onCancel,down:false};
-  const eraseAt=e=>{
+  ecState={c,ctx,bmp,origBmp,onDone,onCancel,down:false,mode:'erase'};
+  const brushAt=e=>{
     const r=c.getBoundingClientRect();
     const sx=c.width/r.width,sy=c.height/r.height;
     const x=(e.clientX-r.left)*sx,y=(e.clientY-r.top)*sy;
     const rad=(+$('ecBrush').value||26)*Math.max(sx,sy);
-    ctx.save();ctx.globalCompositeOperation='destination-out';
-    ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fill();ctx.restore();
+    ctx.save();
+    if(ecState.mode==='restore'&&ecState.origBmp){
+      /* 補回：以圓形裁切，把原圖畫回來 */
+      ctx.globalCompositeOperation='source-over';
+      ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.clip();
+      ctx.drawImage(ecState.origBmp,0,0,c.width,c.height);
+    }else{
+      ctx.globalCompositeOperation='destination-out';
+      ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
   };
-  c.addEventListener('pointerdown',e=>{ecState.down=true;c.setPointerCapture(e.pointerId);eraseAt(e);e.preventDefault()});
-  c.addEventListener('pointermove',e=>{if(ecState&&ecState.down)eraseAt(e)});
+  c.addEventListener('pointerdown',e=>{ecState.down=true;c.setPointerCapture(e.pointerId);brushAt(e);e.preventDefault()});
+  c.addEventListener('pointermove',e=>{if(ecState&&ecState.down)brushAt(e)});
   c.addEventListener('pointerup',()=>{if(ecState)ecState.down=false});
   c.addEventListener('pointercancel',()=>{if(ecState)ecState.down=false});
+}
+function ecSetMode(m){
+  if(!ecState)return;
+  ecState.mode=m;
+  const eb=$('ecModeErase'),rb=$('ecModeRestore');
+  if(eb)eb.classList.toggle('active',m==='erase');
+  if(rb)rb.classList.toggle('active',m==='restore');
 }
 function ecRestore(){
   if(!ecState)return;
@@ -829,28 +881,32 @@ function ecRestore(){
 }
 function ecFinish(){
   if(!ecState)return;
-  const{c,bmp,onDone}=ecState;
-  c.toBlob(b=>{bmp.close&&bmp.close();const done=onDone;ecState=null;done(b)},'image/png');
+  const{c,bmp,origBmp,onDone}=ecState;
+  c.toBlob(b=>{bmp.close&&bmp.close();origBmp&&origBmp.close&&origBmp.close();
+    const done=onDone;ecState=null;done(b)},'image/png');
 }
 function ecCancel(){
   if(!ecState)return;
-  const{bmp,onCancel}=ecState;
-  bmp.close&&bmp.close();const cb=onCancel;ecState=null;cb();
+  const{bmp,origBmp,onCancel}=ecState;
+  bmp.close&&bmp.close();origBmp&&origBmp.close&&origBmp.close();
+  const cb=onCancel;ecState=null;cb();
 }
-/* 去背預覽中開橡皮擦 */
+/* 去背預覽中開修圖（有原圖 → 支援補回） */
 function bgEditCut(idx){
   const results=window._bgResults;const r=results[idx];
   editCutOpen(r.cut,
     blob=>{r.cut=blob;bgPreviewConfirm(results,idx)},   /* 存改後回預覽 */
-    ()=>bgPreviewConfirm(results,idx));
+    ()=>bgPreviewConfirm(results,idx),
+    r.it.photo||null);
 }
-/* 單品詳情開橡皮擦（已採用的去背圖） */
+/* 單品詳情開修圖（已採用的去背圖；原圖若還在 → 支援補回） */
 function itemEditCut(id){
   const it=itemById(id);if(!it||!it.cut)return;
   editCutOpen(it.cut,
     async blob=>{it.cut=await compressImage(blob,600,true);
       urlCache.drop(id);await saveItem(it);openItem(id);render();toast('去背圖已更新')},
-    ()=>openItem(id));
+    ()=>openItem(id),
+    it.photo||null);
 }
 
 /* =====================================================================
