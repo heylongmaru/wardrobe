@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>衣櫃穿搭 · 操作說明</title>
+<style>
+:root{
+  --ink:#1f2a33;--text:#2a3340;--muted:#6b7683;--line:#dbe1df;--bg:#eef1ef;--card:#ffffff;
+  --accent:#2c6e7f;--accent-soft:#e3eef0;--ok:#2e7d5b;--ok-soft:#e2f0e9;
+  --warn:#b5761a;--warn-soft:#f6ecd9;--danger:#b4453c;--danger-soft:#f4e0dd;
+  --radius:12px;--radius-sm:8px;--radius-pill:999px;
+  --shadow:0 1px 2px rgba(31,42,51,.06),0 8px 24px rgba(31,42,51,.06);
+  --wrap-narrow:760px;
+  --font:"PingFang TC","Noto Sans TC","Microsoft JhengHei",-apple-system,system-ui,sans-serif;}
+*{box-sizing:border-box}html,body{margin:0;padding:0}
+body{font-family:var(--font);color:var(--text);background:var(--bg);line-height:1.75;font-size:15px;
+  -webkit-font-smoothing:antialiased;word-break:break-word}
+.wrap{max-width:var(--wrap-narrow);margin:0 auto;padding:22px 16px 96px}
+header.app{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:6px 2px 16px;
+  border-bottom:2px solid var(--ink);margin-bottom:14px}
+header.app h1{font-size:22px;margin:0;color:var(--ink);font-weight:800}
+header.app .sub{color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;
+  box-shadow:var(--shadow);margin-bottom:16px}
+h2{font-size:16px;font-weight:800;color:var(--ink);margin:0 0 8px}
+.hint{color:var(--muted);font-size:13px}
+.tag{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);
+  padding:2px 9px;border-radius:var(--radius-pill)}
+.step{display:flex;gap:10px;margin:10px 0;align-items:flex-start}
+.seq{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none;
+  border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:800;font-size:13px;margin-top:2px}
+.warnbox{background:var(--warn-soft);border:1px solid #e6d3ad;color:#7a5410;border-radius:var(--radius-sm);
+  padding:10px 14px;font-size:13.5px;font-weight:600;margin:10px 0}
+.okbox{background:var(--ok-soft);border:1px solid #bcd9cc;color:var(--ok);border-radius:var(--radius-sm);
+  padding:10px 14px;font-size:13.5px;font-weight:600;margin:10px 0}
+a{color:var(--accent)}
+ul{margin:6px 0;padding-left:22px}
+li{margin:4px 0}
+b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app"><h1>👗 衣櫃穿搭 · 操作說明</h1><span class="sub">v1</span></header>
+
+  <div class="card">
+    <h2>這是什麼</h2>
+    <p>衣櫃管理＋穿搭工具。<b>首要用途：出國打包選衣</b>（和 03 出國旅遊工具接力用），日常穿搭次之。
+    所有資料（含照片）<b>只存在這台裝置的瀏覽器</b>，不上傳、不需登入。</p>
+    <p class="hint">電腦：雙擊 index.html 或開網址。手機：見下方「手機使用」。</p>
+  </div>
+
+  <div class="card">
+    <h2>📱 手機使用（建議這樣用）</h2>
+    <div class="step"><span class="seq">1</span><div>用手機 Safari／Chrome 開<b>線上網址</b>（GitHub Pages，同 03 模式）。</div></div>
+    <div class="step"><span class="seq">2</span><div>Safari：分享鈕 →「<b>加入主畫面</b>」→ 桌面出現圖示，之後點圖示開，像 APP 一樣全螢幕。</div></div>
+    <div class="step"><span class="seq">3</span><div>資料存在<b>手機瀏覽器</b>裡（不上傳）。電腦、手機是兩份各自的資料，用「設定 → 匯出／匯入備份」互搬。</div></div>
+    <div class="warnbox">手機第一次用「自動去背」會下載約 55MB 模型——請在 Wi-Fi 環境跑第一次。
+      直接點 HTML「檔案」在 iPhone 只會出現預覽、資料存不住，所以手機一律走網址。</div>
+  </div>
+
+  <div class="card">
+    <h2>① 建立衣櫃（批次匯入）</h2>
+    <div class="step"><span class="seq">1</span><div>拍照：衣服平放或掛起、<b>一張一件</b>、背景越乾淨越好（之後自動去背效果更佳）。</div></div>
+    <div class="step"><span class="seq">2</span><div>「衣櫃」→「＋ 新增衣物」→ 一次選多張照片。照片會自動壓縮（約 600px，夠用又省空間）並自動抓<b>主色</b>。</div></div>
+    <div class="step"><span class="seq">3</span><div>逐張快速標註：點<b>類型</b>（必選）、季節、正式度，約 3 秒一件。名稱品牌可留白之後再補。</div></div>
+    <div class="warnbox">誠實說明：「類型／材質」瀏覽器自動辨識不可靠，所以採手動點選 chips；
+      只有「主色」是自動判定（可改）。半自動替代：把照片丟進 Claude 對話請它列出每件的類型／顏色／季節，
+      再對照著快速點 chips（v1 尚無「標註檔直接匯入」，列在下一版待辦）。</div>
+  </div>
+
+  <div class="card">
+    <h2>② 自動去背 <span class="tag">內建・免費</span></h2>
+    <p>「衣櫃」→「🪄 批次去背」，或在單品詳情按「🪄 自動去背」。跑完會<b>逐張預覽</b>，你按「採用」才會生效；採用時可選擇刪原圖省空間。</p>
+    <ul>
+      <li><b>首次使用需要網路</b>：會下載去背模型（小模型約 55MB／中模型約 99MB），之後由瀏覽器快取、通常不用重抓。</li>
+      <li>每張約 10～30 秒（依裝置效能）。100 件建議放著讓它批次跑，中途可按「先停在這裡」。</li>
+      <li>設定頁可切換模型：手機建議「小模型」（記憶體較省），電腦可用「中模型」（邊緣較細緻）。</li>
+    </ul>
+    <div class="warnbox">備援路徑：離線、失敗、或對效果不滿意時，可用其他去背工具產生 PNG，
+      再到單品詳情按「匯入去背 PNG」。工具不會假裝一定成功。</div>
+  </div>
+
+  <div class="card">
+    <h2>③ 建立搭配</h2>
+    <div class="step"><span class="seq">1</span><div>「搭配」→「＋ 新搭配」→ 勾選單品 → 在畫布上<b>拖曳排位置</b>、滑桿調大小。</div></div>
+    <div class="step"><span class="seq">2</span><div>標<b>場景</b>（可多選：上班、約會、運動…）。</div></div>
+    <div class="step"><span class="seq">3</span><div>複合場景兩招：<b>🛵 騎車開關</b>（含裙裝會提醒加安全褲）；
+      <b>🔄 轉場調整</b>（先上班後約會：填「可脫」「可加」的單品）。</div></div>
+    <div class="step"><span class="seq">4</span><div>「今天穿」→ 這套的每件衣物<b>穿著次數自動 +1</b>（單品頁可手動加減）。</div></div>
+    <div class="step"><span class="seq">5</span><div>「🖼 匯出拼貼圖」→ 下載 PNG 可分享。</div></div>
+    <div class="step"><span class="seq">6</span><div>懶得自己想：「<b>🎲 自動配一套</b>」→ 輸入大約氣溫、選場景 → 產生 3 套方案
+      （規則：溫度合、正式度接近、色彩不打架、少穿的優先出場）→ 點喜歡的存成搭配再手調。</div></div>
+    <div class="okbox">找靈感：「🔍 找參考穿搭」會先讓你點關鍵字——<b>女生穿搭／男生穿搭／日系／韓系</b>
+      ＋你的單品（如「深藍襯衫」）＋自訂（如「牛仔寬褲」）——再開 Pinterest 或 WEAR 搜尋。
+      男女結果差很多，記得點性別詞；想跨著參考就不點。
+      工具只做規則式建議（色彩、場合、溫度），美感判斷交給你的眼睛。</div>
+  </div>
+
+  <div class="card">
+    <h2>④ 出國模式（和 03 接力）</h2>
+    <div class="step"><span class="seq">1</span><div>「旅程」→「＋ 新旅程」→ 目的地按「查城市」選定位；
+      <b>出發地</b>也選一下（例：台北），出發／回程日才會顯示兩地溫差 → 選日期範圍。</div></div>
+    <div class="step"><span class="seq">2</span><div>「🌤 抓天氣預報」：用 open-meteo 免費服務抓每天最低／最高溫與降雨（含出發地頭尾兩天）。
+      <b>預報只涵蓋約 16 天內</b>；更遠的日期、或離線時，按每天的「輸溫度」手動填。</div></div>
+    <div class="step"><span class="seq">3</span><div><b>「🪄 自動排整趟」一鍵排完</b>：依每天溫度自動配，
+      並套用<b>重穿規則</b>——上衣穿 1 天要洗、褲裙可穿 3 天、外套整趟重複（設定頁可調；有現場洗衣就調大）。
+      同件單品會跨天重新組合、不會天天同一套。配不出來的天會提醒你衣服不夠。</div></div>
+    <div class="step"><span class="seq">4</span><div>每天的結果可個別「調整」：重排這天／存成正式搭配進畫布調／改手動選。
+      也可以完全手動：「配一套」會依當天溫度和衣物<b>適穿溫度</b>排序建議（太熱／太涼會提醒）。</div></div>
+    <div class="step"><span class="seq">5</span><div><b>✈️ 移動日</b>：出發日與回程日會顯示「出發地 → 當地」兩地溫度，
+      溫差大（≥8°C）提醒洋蔥式穿法；固定提醒機上冷、手邊留外套。</div></div>
+    <div class="step"><span class="seq">6</span><div>「📤 彙整＋匯出」：自動<b>去重</b>產生「衣物打包清單」＋「每日穿搭計畫表」（含自動排的天與移動日提醒）。</div></div>
+    <div class="warnbox">貼進 03 的方式：複製打包清單後，到 03 出國旅遊工具「打包 → 自訂項目」逐行貼上
+      （03 目前是一次加一項）。計畫表可直接列印或存起來路上看。</div>
+  </div>
+
+  <div class="card">
+    <h2>⑤ 統計與斷捨離</h2>
+    <p>「統計」看最常穿 Top 10 與<b>斷捨離提醒</b>：超過 N 個月沒穿的衣物會列出來（N 可調，預設 6 個月；從未穿過的舊衣也算）。</p>
+  </div>
+
+  <div class="card">
+    <h2>⑥ 備份（重要！）</h2>
+    <p>資料只存在<b>這台裝置的這個瀏覽器</b>。以下情況前務必先備份：清瀏覽器資料、換裝置、換瀏覽器開啟方式（例如從檔案改成網址）。</p>
+    <ul>
+      <li>「設定」→「📦 匯出備份」：單一 JSON 檔，<b>含全部照片</b>。</li>
+      <li>新裝置：開 index.html →「📥 匯入備份」即可整套還原。</li>
+      <li>分享給家人朋友：把 index.html＋guide.html 給對方即可，各自的資料各自存、互不相通。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>常見問題</h2>
+    <ul>
+      <li><b>去背一直失敗？</b>先確認網路；手機改用小模型；再不行就用「匯入去背 PNG」備援。</li>
+      <li><b>模型每次都重新下載？</b>瀏覽器快取被清了。下載完成後同一瀏覽器通常會快取住。</li>
+      <li><b>照片會上傳到哪裡？</b>不會上傳。壓縮、去背運算、儲存全部在你的瀏覽器內完成。會對外連線的只有三種，且都不含你的照片：
+        ① 去背時向 jsdelivr／IMG.LY 官方 CDN <b>下載</b>程式與模型（只下載、不上傳）；
+        ② 「查城市／抓天氣」連 open-meteo（只送出城市名與座標）；
+        ③ 你主動按 Pinterest／WEAR 按鈕時開啟外部網站（只帶你設定的關鍵字）。</li>
+      <li><b>斷網能用嗎？</b>核心功能（衣櫃、搭配、統計、備份）離線可用；抓天氣與「首次」去背需要網路。</li>
+      <li><b>可以同時開兩個視窗嗎？</b>不建議。兩個視窗各自快取，後存的會蓋掉先存的；一次開一個就好。</li>
+    </ul>
+  </div>
+
+  <p class="hint">04-wardrobe v1 · 單檔工具 · 資料在本機 · 設計系統：小小黑開箱 _design-system v1</p>
+</div>
+</body>
+</html>
