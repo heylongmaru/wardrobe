@@ -92,6 +92,7 @@ th{font-size:12px;color:var(--muted);font-weight:700}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 /* ---- 防橫向溢出（手機） ---- */
 html,body{overflow-x:hidden}
+body.modal-open{position:fixed;left:0;right:0;width:100%;overflow:hidden} /* 開彈窗時鎖定背景，避免 iOS 捲動卡住 */
 img,canvas,video{max-width:100%}
 .row>*,.filterbar>*{max-width:100%}
 label.field{min-width:0}
@@ -144,10 +145,10 @@ select{max-width:100%}
   border-radius:var(--radius-pill);cursor:pointer;font-size:14px;font-weight:700;font-family:inherit;transition:.12s}
 .chipsel .c.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .modal-bg{position:fixed;inset:0;background:rgba(31,42,51,.45);z-index:100;display:flex;
-  align-items:flex-end;justify-content:center;padding:0}
+  align-items:flex-end;justify-content:center;padding:0;overscroll-behavior:contain;touch-action:none}
 @media(min-width:600px){.modal-bg{align-items:center;padding:24px}}
 .modal{background:var(--bg);border-radius:16px 16px 0 0;max-height:92vh;overflow-y:auto;width:100%;
-  padding:18px 16px 40px;-webkit-overflow-scrolling:touch}
+  padding:18px 16px 40px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
 @media(min-width:600px){.modal{border-radius:16px;max-width:680px;padding:22px 22px 26px}}
 .modal h2{font-size:18px;margin-bottom:10px}
 .modal .close{float:right;font-size:20px;border:none;background:none;cursor:pointer;color:var(--muted);padding:2px 8px}
@@ -195,7 +196,7 @@ select{max-width:100%}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>👗 衣櫃穿搭 <span class="tag">v1.4</span></h1>
+    <h1>👗 衣櫃穿搭 <span class="tag">v1.5</span></h1>
     <span class="sub">出國打包選衣 × 日常穿搭 · 資料只存在這台裝置</span>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -384,9 +385,19 @@ function openModal(html,onClose){
   $('modalRoot').innerHTML=`<div class="modal-bg" onclick="if(event.target===this)closeModal()">
     <div class="modal">${html}</div></div>`;
   window._modalOnClose=onClose||null;
-  document.body.style.overflow='hidden';
+  /* iOS 友善的背景鎖定：固定 body 並記住捲動位置（單純 overflow:hidden 在 iOS 會造成彈窗內捲動卡住） */
+  if(!document.body.classList.contains('modal-open')){
+    window._scrollY=window.scrollY||0;
+    document.body.style.top=(-window._scrollY)+'px';
+    document.body.classList.add('modal-open');
+  }
 }
-function closeModal(){$('modalRoot').innerHTML='';document.body.style.overflow='';
+function closeModal(){$('modalRoot').innerHTML='';
+  if(document.body.classList.contains('modal-open')){
+    document.body.classList.remove('modal-open');
+    document.body.style.top='';
+    window.scrollTo(0,window._scrollY||0);
+  }
   if(window._modalOnClose){const f=window._modalOnClose;window._modalOnClose=null;f()}}
 
 /* 尺寸 chips（點選＝填入對應輸入框；再點一次取消） */
@@ -713,22 +724,58 @@ function bgPickModel(){
 }
 async function bgLoad(){
   if(bgMod)return bgMod;
-  if(!navigator.onLine)throw new Error('offline');
-  bgMod=await import(BG_CDN);
+  if(!navigator.onLine){const e=new Error('離線');e.stage='offline';throw e}
+  try{bgMod=await import(BG_CDN)}
+  catch(err){const e=new Error('載入去背程式失敗');e.stage='load';throw e}
   return bgMod;
 }
-async function bgRemoveOne(blob,onProgress){
+/* onProgress(cur,tot)；modelOverride 可強制指定模型（重試用） */
+async function bgRemoveOne(blob,onProgress,modelOverride){
   const mod=await bgLoad();
-  return await mod.removeBackground(blob,{
-    model:bgPickModel(),device:'cpu',output:{format:'image/png'},
-    progress:(key,cur,tot)=>{if(onProgress&&key.startsWith('fetch')&&tot>0)onProgress(cur,tot,key)}
-  });
+  let reachedDownload=false;
+  try{
+    return await mod.removeBackground(blob,{
+      model:modelOverride||bgPickModel(),device:'cpu',output:{format:'image/png'},
+      progress:(key,cur,tot)=>{if(key&&key.startsWith('fetch')){reachedDownload=true;
+        if(onProgress&&tot>0)onProgress(cur,tot,key)}}
+    });
+  }catch(err){
+    const e=new Error(err&&err.message||'去背失敗');
+    e.stage=reachedDownload?'infer':'download';e.raw=err;throw e;
+  }
 }
-function bgFail(e){
+/* 先用預設模型，失敗且非最小模型 → 自動改用最小模型重試一次 */
+async function bgRun(blob,onProgress){
+  try{return await bgRemoveOne(blob,onProgress)}
+  catch(e){
+    if(e.stage==='infer'&&bgPickModel()!=='isnet_quint8'){
+      if(onProgress)onProgress(0,1,'retry');
+      return await bgRemoveOne(blob,onProgress,'isnet_quint8'); /* 記憶體不足 → 換最小模型再試 */
+    }
+    throw e;
+  }
+}
+function bgFailModal(e){
   console.warn('去背失敗',e);
-  const msg=(e&&e.message==='offline')?'目前離線，去背需要網路（首次要下載模型）。':
-    '去背失敗（可能是網路或記憶體不足）。';
-  toast(msg+' 可改用「匯入去背 PNG」備援。',4200);
+  const stage=e&&e.stage;
+  const why=stage==='offline'?'目前離線——去背首次需要網路下載模型。':
+    stage==='load'?'去背程式沒載入成功（多半是網路擋住了 CDN）。':
+    stage==='download'?'去背模型沒下載完成（網路不穩或被擋）。':
+    stage==='infer'?'你的裝置跑不動這個去背模型——iPhone 常因記憶體不足失敗（這是已知限制）。':
+    '去背沒成功。';
+  openModal(`
+    <button class="close" onclick="closeModal()">✕</button>
+    <h2>😵 去背沒成功</h2>
+    <p class="hint" style="margin-bottom:12px">${why}</p>
+    <b style="font-size:13.5px">你可以這樣做：</b>
+    <div class="stack" style="margin-top:8px">
+      <div class="okbox" style="background:var(--accent-soft);border-color:transparent;color:var(--text)">
+        <b>💬 讓 Claude 幫你去背（最推薦，尤其 iPhone）</b><br>
+        把衣服照片傳進和我（Claude）的對話，我在雲端幫你去背，回傳 PNG／或直接生一個「匯入就整櫃好」的備份檔。
+      </div>
+      <button class="btn ghost" onclick="closeModal()">🔁 關掉、稍後在 Wi-Fi 下再試一次（可能是網路）</button>
+      <p class="hint">或：這件先用原圖也完全能用——去背只是讓拼貼圖更好看，不影響其他功能。</p>
+    </div>`);
 }
 /* ---- 單張 ---- */
 async function bgSingle(id){
@@ -737,11 +784,13 @@ async function bgSingle(id){
     <p class="hint" id="bgMsg">準備模型（首次使用需下載，請耐心等）…</p>
     <div class="progbar"><i id="bgBar"></i></div>`);
   try{
-    const cut=await bgRemoveOne(it.photo,(cur,tot)=>{
-      $('bgMsg').textContent=`下載去背模型… ${(cur/1048576).toFixed(0)} / ${(tot/1048576).toFixed(0)} MB`;
+    const cut=await bgRun(it.photo,(cur,tot,key)=>{
+      const m=$('bgMsg');if(!m)return;
+      if(key==='retry'){m.textContent='換較小的模型再試一次…';$('bgBar').style.width='0%';return}
+      m.textContent=`下載去背模型… ${(cur/1048576).toFixed(0)} / ${(tot/1048576).toFixed(0)} MB`;
       $('bgBar').style.width=Math.round(100*cur/tot)+'%';});
     bgPreviewConfirm([{it,cut}],0);
-  }catch(e){closeModal();bgFail(e)}
+  }catch(e){closeModal();bgFailModal(e)}
 }
 /* ---- 批次 ---- */
 let bgBatchStopFlag=false;
@@ -763,15 +812,17 @@ async function bgBatchStart(){
       const it=targets[i];
       $('bgCount').textContent=`第 ${i+1} / ${targets.length} 件：${it.name||it.type}`;
       const nowImg=$('bgNow');nowImg.src=urlCache.getOrig(it);nowImg.style.display='block';
-      const cut=await bgRemoveOne(it.photo,(cur,tot)=>{
-        $('bgMsg').textContent=`下載去背模型… ${(cur/1048576).toFixed(0)} / ${(tot/1048576).toFixed(0)} MB`;
+      const cut=await bgRun(it.photo,(cur,tot,key)=>{
+        const m=$('bgMsg');if(!m)return;
+        if(key==='retry'){m.textContent='換較小的模型再試一次…';return}
+        m.textContent=`下載去背模型… ${(cur/1048576).toFixed(0)} / ${(tot/1048576).toFixed(0)} MB`;
         $('bgBar').style.width=Math.round(100*cur/tot)+'%';});
       $('bgMsg').textContent='模型已就緒，逐張處理中…';
       $('bgBar').style.width=Math.round(100*(i+1)/targets.length)+'%';
       done.push({it,cut});
     }
   }catch(e){
-    if(!done.length){closeModal();bgFail(e);return}
+    if(!done.length){closeModal();bgFailModal(e);return}
     toast('中途發生錯誤，先確認已完成的部分');
   }
   if(!done.length){closeModal();toast('已取消');return}
