@@ -196,7 +196,7 @@ select{max-width:100%}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>👗 衣櫃穿搭 <span class="tag">v1.5</span></h1>
+    <h1>👗 衣櫃穿搭 <span class="tag">v1.6</span></h1>
     <span class="sub">出國打包選衣 × 日常穿搭 · 資料只存在這台裝置</span>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -714,7 +714,9 @@ function itemReplacePhoto(id){
    自動去背引擎（@imgly/background-removal · 瀏覽器端 WASM）
    首次使用需網路下載模型（小 ~55MB / 中 ~99MB），之後靠瀏覽器快取。
    ===================================================================== */
-const BG_CDN='https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/dist/index.mjs';
+/* 必須用 jsdelivr 的 /+esm 端點：它會把相依套件（onnxruntime-web 等）自動解析成可用的 URL；
+   直接載 /dist/index.mjs 會因為裸模組名 'onnxruntime-web' 無法解析而在推論階段失敗（所有裝置皆然）。 */
+const BG_CDN='https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
 let bgMod=null;
 function bgPickModel(){
   if(SET.bgModel==='small'||SET.bgModel==='medium')return SET.bgModel==='small'?'isnet_quint8':'isnet_fp16';
