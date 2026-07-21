@@ -184,6 +184,15 @@ select{max-width:100%}
   padding:8px 12px;font-size:13.5px;font-weight:600;margin:8px 0}
 .copybox{background:#fff;border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px;
   font-size:13.5px;white-space:pre-wrap;max-height:280px;overflow-y:auto;line-height:1.8}
+.grid9{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:10px 0}
+.g9cell{border:1px solid var(--line);border-radius:10px;background:#fff;padding:6px;min-height:96px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;position:relative}
+.g9cell .cat{position:absolute;top:4px;left:6px;font-size:10.5px;font-weight:700;color:#fff;
+  background:var(--accent);border-radius:6px;padding:1px 6px;opacity:.9}
+.g9cell.top .cat{background:#3a7c86}.g9cell.bottom .cat{background:#8a6d3b}.g9cell.layer .cat{background:#7a5a86}
+.g9cell img{width:100%;max-height:70px;object-fit:contain}
+.g9cell .lbl{font-size:11.5px;color:var(--ink);line-height:1.35;margin-top:14px}
+.g9cell.empty2{color:var(--muted);font-size:12px}
 .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 .subtab{appearance:none;border:1px solid var(--line);background:#fff;color:var(--muted);padding:7px 13px;
   border-radius:var(--radius-pill);cursor:pointer;font-size:14px;font-weight:700;font-family:inherit}
@@ -196,7 +205,7 @@ select{max-width:100%}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>👗 衣櫃穿搭 <span class="tag">v2.0</span></h1>
+    <h1>👗 衣櫃穿搭 <span class="tag">v2.2</span></h1>
     <span class="sub">出國打包選衣 × 日常穿搭 · 資料只存在這台裝置</span>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -320,7 +329,8 @@ const urlCache={m:new Map(),
 
 /* ---------------- 圖片處理：壓縮＋主色 ---------------- */
 async function compressImage(file,maxSide,asPng){
-  const bmp=await createImageBitmap(file);
+  /* imageOrientation:'from-image' → 自動照 EXIF 轉正手機直拍/橫拍的照片，不會再是反的 */
+  const bmp=await createImageBitmap(file,{imageOrientation:'from-image'}).catch(()=>createImageBitmap(file));
   const sc=Math.min(1,(maxSide||600)/Math.max(bmp.width,bmp.height));
   const w=Math.round(bmp.width*sc),h=Math.round(bmp.height*sc);
   const c=document.createElement('canvas');c.width=w;c.height=h;
@@ -328,6 +338,23 @@ async function compressImage(file,maxSide,asPng){
   if(!asPng){ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h)} /* JPEG 無透明：先鋪白底，避免透明 PNG 進來變黑底 */
   ctx.drawImage(bmp,0,0,w,h);bmp.close&&bmp.close();
   return new Promise(r=>c.toBlob(r,asPng?'image/png':'image/jpeg',asPng?undefined:0.85));
+}
+/* 手動把一張圖轉 90°（EXIF 自動轉正失敗時的救援） */
+async function rotate90(blob,asPng){
+  const bmp=await createImageBitmap(blob);
+  const c=document.createElement('canvas');c.width=bmp.height;c.height=bmp.width;
+  const ctx=c.getContext('2d');
+  if(!asPng){ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height)}
+  ctx.translate(c.width/2,c.height/2);ctx.rotate(Math.PI/2);
+  ctx.drawImage(bmp,-bmp.width/2,-bmp.height/2);bmp.close&&bmp.close();
+  return new Promise(r=>c.toBlob(r,asPng?'image/png':'image/jpeg',asPng?undefined:0.85));
+}
+async function itemRotate(id){
+  const it=itemById(id);if(!it)return;
+  toast('轉向中…');
+  if(it.photo)it.photo=await rotate90(it.photo,false);
+  if(it.cut)it.cut=await rotate90(it.cut,true);
+  urlCache.drop(id);await saveItem(it);openItem(id);toast('已轉 90°（還是不正就再按幾次）');
 }
 async function dominantColor(blob){
   try{
@@ -630,6 +657,7 @@ function openItem(id){
       <button class="btn accent" style="flex:1" onclick="pairItemModal('${it.id}')">✨ 幫這件配（找搭配）</button>
     </div>
     <div class="row" style="margin:6px 0 10px">
+      ${it.photo||it.cut?`<button class="btn ghost sm" onclick="itemRotate('${it.id}')">🔄 轉90°</button>`:''}
       ${it.photo&&!it.cut?`<button class="btn accent sm" onclick="bgSingle('${it.id}')">🪄 自動去背</button>`:''}
       ${it.cut?`<button class="btn ghost sm" onclick="itemEditCut('${it.id}')">🧽 修去背（擦手/衣架）</button>`:''}
       ${it.cut&&it.photo?`<button class="btn ghost sm" onclick="itemDropOrig('${it.id}')">刪原圖省空間</button>`:''}
@@ -1094,6 +1122,7 @@ function vFit(){
       <div class="row" style="align-items:center">
         <button class="btn accent" onclick="fitNew()">＋ 新搭配</button>
         <button class="btn ghost" onclick="autoFitModal()">🎲 自動配一套</button>
+        <button class="btn ghost" onclick="grid9Modal()">🧳 九宮格打包法</button>
       </div></div>
     ${SET.styleNotes?`<p class="hint">📌 我的搭配原則：${esc(SET.styleNotes)}</p>`:''}
     ${list.length===0?`<div class="empty">還沒有搭配。先到「衣櫃」加衣物，再回來把它們組成一套。</div>`:
@@ -1376,6 +1405,121 @@ function pairAdopt(i){
   let n=0;
   for(const it of items){fitEdit.layout.push({itemId:it.id,x:8+(n%3)*30,y:4+Math.floor(n/3)*30,w:34,z:n+1});n++}
   fitEditor();
+}
+/* ---------------- 🧳 九宮格打包法（3×3 拉丁方陣：3上3下3外搭，隨便挑都成套） ---------------- */
+const GRID9_LAYOUT=[['上衣','下身','外搭'],['下身','外搭','上衣'],['外搭','上衣','下身']];
+const G9CAT={'上衣':{types:TOP_TYPES,cls:'top'},'下身':{types:BOTTOM_TYPES,cls:'bottom'},'外搭':{types:['外套'],cls:'layer'}};
+const GRID9_TEMPLATE={
+  '上衣':['白色棉質 T-shirt','輕薄針織上衣','稍正式上衣或襯衫'],
+  '下身':['中藍牛仔褲','不易皺的長褲','棉質中長裙'],
+  '外搭':['防潑水長版外套','休閒西裝／短版外套','針織開襟衫'],
+};
+function grid9Modal(){
+  openModal(`
+    <button class="close" onclick="closeModal()">✕</button>
+    <h2>🧳 九宮格打包法</h2>
+    <p class="hint">出國只帶 <b>3 件上衣＋3 件下身＋3 件外搭</b>，排成 3×3、每行每列剛好各一件——這樣<b>隨便挑都能配成一套</b>，最多生出 3×3×3 種組合。再配鞋子＋配件就完整了。</p>
+    <div class="row" style="margin-bottom:10px">
+      <label class="field">這趟氣溫約 °C（可空白）
+        <span class="rangewrap"><input type="number" id="g9Tmin" placeholder="低"> ～
+          <input type="number" id="g9Tmax" placeholder="高"></span></label>
+    </div>
+    <div class="row" style="margin-bottom:6px">
+      <button class="btn accent" style="flex:1" onclick="grid9FromCloset()">✨ 從我的衣櫃自動挑</button>
+      <button class="btn ghost" style="flex:1" onclick="grid9FromScratch()">📋 從零開始（經典清單）</button>
+    </div>
+    <div id="g9body"></div>`);
+}
+function g9Temp(){
+  const a=($('g9Tmin')||{}).value,b=($('g9Tmax')||{}).value;
+  let tmin=a===''||a==null?null:+a,tmax=b===''||b==null?null:+b;
+  if(tmin!=null&&tmax==null)tmax=tmin;if(tmax!=null&&tmin==null)tmin=tmax;
+  if(tmin!=null&&tmin>tmax)[tmin,tmax]=[tmax,tmin];
+  return{tmin,tmax};
+}
+function grid9Pick(types,n,opt){
+  let pool=ITEMS.filter(x=>types.includes(x.type)&&tempOverlap(x,opt.tmin,opt.tmax));
+  pool=pool.slice().sort((a,b)=>(b.fav?1:0)-(a.fav?1:0)||(a.wearCount||0)-(b.wearCount||0));
+  const picked=[],cols=new Set();
+  for(const it of pool){if(picked.length>=n)break;if(cols.has(it.colorName)&&pool.length>n)continue;picked.push(it);cols.add(it.colorName)}
+  for(const it of pool){if(picked.length>=n)break;if(!picked.includes(it))picked.push(it)}
+  return picked.slice(0,n);
+}
+function grid9Build(tops,bottoms,outers){
+  const pools={'上衣':tops.slice(),'下身':bottoms.slice(),'外搭':outers.slice()};
+  const idx={'上衣':0,'下身':0,'外搭':0};
+  return GRID9_LAYOUT.map(row=>row.map(cat=>({cat,it:pools[cat][idx[cat]++]||null})));
+}
+function grid9GridHtml(grid){
+  return `<div class="grid9">${grid.flat().map(cell=>{
+    const c=G9CAT[cell.cat].cls;
+    return `<div class="g9cell ${c}"><span class="cat">${cell.cat}</span>
+      ${cell.it?`<img src="${urlCache.get(cell.it)}"><span class="lbl">${esc((cell.it.colorName||'')+(cell.it.name||cell.it.type))}</span>`
+        :`<span class="lbl empty2" style="margin-top:16px">（缺一件${cell.cat}）</span>`}</div>`;
+  }).join('')}</div>`;
+}
+function grid9FromCloset(){
+  if(!ITEMS.length){$('g9body').innerHTML='<div class="warnline">衣櫃還沒有衣物。先到「衣櫃」加幾件，或看看「從零開始」的經典清單先打包。</div>';return}
+  const {tmin,tmax}=g9Temp();
+  const tops=grid9Pick(TOP_TYPES,3,{tmin,tmax}),bottoms=grid9Pick(BOTTOM_TYPES,3,{tmin,tmax}),outers=grid9Pick(['外套'],3,{tmin,tmax});
+  window._g9={tops,bottoms,outers};
+  const grid=grid9Build(tops,bottoms,outers);
+  const short=[];
+  if(tops.length<3)short.push(`上衣 ${tops.length}/3`);
+  if(bottoms.length<3)short.push(`下身 ${bottoms.length}/3`);
+  if(outers.length<3)short.push(`外搭 ${outers.length}/3`);
+  const enough=tops.length&&bottoms.length;
+  $('g9body').innerHTML=`
+    ${grid9GridHtml(grid)}
+    ${short.length?`<div class="warnline">衣櫃還沒湊滿：${esc(short.join('、'))}——缺的格子會空著。先去衣櫃多加幾件，或參考「從零開始」的清單。</div>`:''}
+    <div class="row" style="margin-top:8px">
+      ${enough?`<button class="btn accent" style="flex:1" onclick="grid9Combos()">🎲 幫我把這幾件配成組合</button>`:''}
+      <button class="btn ghost" onclick="grid9FromCloset()">🔄 換一批</button>
+    </div>
+    <div id="g9combos"></div>`;
+}
+function grid9FromScratch(){
+  const idx={'上衣':0,'下身':0,'外搭':0};
+  const grid=GRID9_LAYOUT.map(row=>row.map(cat=>({cat,txt:GRID9_TEMPLATE[cat][idx[cat]++]})));
+  $('g9body').innerHTML=`
+    <div class="grid9">${grid.flat().map(cell=>{
+      const c=G9CAT[cell.cat].cls;
+      return `<div class="g9cell ${c}"><span class="cat">${cell.cat}</span>
+        <span class="lbl" style="margin-top:18px">${esc(cell.txt)}</span></div>`;
+    }).join('')}</div>
+    <p class="hint">這是國外博主的經典配置，適合大部分旅行。照這個清單打包就好；或到「衣櫃」把對應的衣服加進來，再回來按「從我的衣櫃自動挑」讓它幫你配。<br>💡 不想帶那麼多層？可用一件<b>洋裝</b>取代其中一件。別忘了<b>鞋子</b>（好走球鞋＋一雙正式點）和<b>造型配件</b>（皮帶／襪子／包）。</p>
+    <button class="btn accent" onclick="grid9FromCloset()">✨ 改用我的衣櫃自動挑</button>`;
+}
+function grid9Combos(){
+  const g=window._g9;if(!g||!g.tops.length||!g.bottoms.length)return;
+  const {tmin,tmax}=g9Temp();
+  const needOuter=tmin!=null&&tmin<=18&&g.outers.length>0;
+  const cands=[];
+  for(const t of g.tops)for(const b of g.bottoms){
+    let items=[t,b];
+    if(needOuter){let best=null,bs=-1;
+      for(const o of g.outers){const s=comboScore([t,b,o],{tempMin:tmin,tempMax:tmax});if(s>bs){bs=s;best=o}}
+      if(best)items=[t,b,best];}
+    cands.push({items,score:comboScore(items,{tempMin:tmin,tempMax:tmax})});
+  }
+  cands.sort((a,b)=>b.score-a.score);
+  window._g9combos=cands.map(c=>c.items);
+  $('g9combos').innerHTML=`
+    <div class="divider"></div>
+    <b style="font-size:13.5px">🎯 這 ${g.tops.length}×${g.bottoms.length} 件配得出 ${cands.length} 套（點一套存起來）</b>
+    <div class="picklist" style="margin-top:8px">${window._g9combos.map((items,i)=>`
+      <div class="outfitcard" onclick="grid9SaveCombo(${i})">
+        <div class="thumbs">${items.map(it=>`<img src="${urlCache.get(it)}">`).join('')}</div>
+        <div style="flex:1;min-width:0"><b>${esc(items.map(x=>(x.colorName||'')+(x.name||x.type)).join('＋'))}</b></div>
+        <span class="tag">存成搭配 →</span></div>`).join('')}</div>`;
+}
+async function grid9SaveCombo(i){
+  const items=(window._g9combos||[])[i];if(!items)return;
+  const o={id:uid(),name:'九宮格 '+items.map(x=>x.name||x.type).join('＋'),itemIds:items.map(x=>x.id),
+    layout:items.map((it,n)=>({itemId:it.id,x:8+(n%3)*30,y:4+Math.floor(n/3)*30,w:34,z:n+1})),
+    scenes:['出遊'],conditions:{bike:false},transition:{removable:'',addable:''},
+    notes:'',wearDates:[],createdAt:todayStr()};
+  await saveOutfit(o);toast('已存成搭配 ✓（可到「搭配」查看）');
 }
 async function fitWearToday(oid){
   const o=OUTFITS.find(x=>x.id===oid);if(!o)return;
