@@ -205,7 +205,7 @@ select{max-width:100%}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>👗 衣櫃穿搭 <span class="tag">v2.2</span></h1>
+    <h1>👗 衣櫃穿搭 <span class="tag">v2.3</span></h1>
     <span class="sub">出國打包選衣 × 日常穿搭 · 資料只存在這台裝置</span>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -1424,9 +1424,10 @@ function grid9Modal(){
         <span class="rangewrap"><input type="number" id="g9Tmin" placeholder="低"> ～
           <input type="number" id="g9Tmax" placeholder="高"></span></label>
     </div>
-    <div class="row" style="margin-bottom:6px">
-      <button class="btn accent" style="flex:1" onclick="grid9FromCloset()">✨ 從我的衣櫃自動挑</button>
-      <button class="btn ghost" style="flex:1" onclick="grid9FromScratch()">📋 從零開始（經典清單）</button>
+    <div class="row" style="margin-bottom:6px;flex-wrap:wrap;gap:6px">
+      <button class="btn accent" style="flex:1;min-width:150px" onclick="grid9FromCloset()">✨ 從我的衣櫃自動挑</button>
+      <button class="btn ghost" style="flex:1;min-width:120px" onclick="grid9Blank()">🖐️ 自己逐格挑</button>
+      <button class="btn ghost" style="flex:1;min-width:120px" onclick="grid9FromScratch()">📋 從零開始（經典清單）</button>
     </div>
     <div id="g9body"></div>`);
 }
@@ -1462,21 +1463,71 @@ function grid9FromCloset(){
   if(!ITEMS.length){$('g9body').innerHTML='<div class="warnline">衣櫃還沒有衣物。先到「衣櫃」加幾件，或看看「從零開始」的經典清單先打包。</div>';return}
   const {tmin,tmax}=g9Temp();
   const tops=grid9Pick(TOP_TYPES,3,{tmin,tmax}),bottoms=grid9Pick(BOTTOM_TYPES,3,{tmin,tmax}),outers=grid9Pick(['外套'],3,{tmin,tmax});
-  window._g9={tops,bottoms,outers};
-  const grid=grid9Build(tops,bottoms,outers);
-  const short=[];
-  if(tops.length<3)short.push(`上衣 ${tops.length}/3`);
-  if(bottoms.length<3)short.push(`下身 ${bottoms.length}/3`);
-  if(outers.length<3)short.push(`外搭 ${outers.length}/3`);
-  const enough=tops.length&&bottoms.length;
+  window._g9grid=grid9Build(tops,bottoms,outers);
+  g9Render();
+}
+function grid9Blank(){
+  if(!ITEMS.length){$('g9body').innerHTML='<div class="warnline">衣櫃還沒有衣物。先到「衣櫃」加幾件，再回來逐格挑；或看看「從零開始」的經典清單。</div>';return}
+  window._g9grid=GRID9_LAYOUT.map(row=>row.map(cat=>({cat,it:null})));
+  g9Render();
+}
+/* 依 GRID9_LAYOUT 收集某類別各格目前放的（去重）單品，供「配成組合」用 */
+function g9CellItems(cat){
+  const out=[],seen=new Set();
+  (window._g9grid||[]).forEach(row=>row.forEach(cell=>{
+    if(cell.cat===cat&&cell.it&&!seen.has(cell.it.id)){seen.add(cell.it.id);out.push(cell.it)}
+  }));
+  return out;
+}
+/* 把 window._g9grid 畫進 #g9body；每一格都可點 → g9EditCell 換衣 */
+function g9Render(){
+  const grid=window._g9grid;if(!grid)return;
+  window._g9={tops:g9CellItems('上衣'),bottoms:g9CellItems('下身'),outers:g9CellItems('外搭')};
+  const enough=window._g9.tops.length&&window._g9.bottoms.length;
+  const gh=`<div class="grid9">${grid.map((row,r)=>row.map((cell,c)=>{
+    const cls=G9CAT[cell.cat].cls;
+    return `<div class="g9cell ${cls}" style="cursor:pointer" onclick="g9EditCell(${r},${c})" title="點我換這一格">
+      <span class="cat">${cell.cat}</span>
+      ${cell.it
+        ?`<img src="${urlCache.get(cell.it)}"><span class="lbl">${esc((cell.it.colorName||'')+(cell.it.name||cell.it.type))}</span>`
+        :`<span class="lbl empty2" style="margin-top:10px">＋ 點我挑<br>一件${cell.cat}</span>`}</div>`;
+  }).join('')).join('')}</div>`;
   $('g9body').innerHTML=`
-    ${grid9GridHtml(grid)}
-    ${short.length?`<div class="warnline">衣櫃還沒湊滿：${esc(short.join('、'))}——缺的格子會空著。先去衣櫃多加幾件，或參考「從零開始」的清單。</div>`:''}
-    <div class="row" style="margin-top:8px">
-      ${enough?`<button class="btn accent" style="flex:1" onclick="grid9Combos()">🎲 幫我把這幾件配成組合</button>`:''}
-      <button class="btn ghost" onclick="grid9FromCloset()">🔄 換一批</button>
+    <p class="hint" style="margin:2px 0 8px">👆 <b>每一格都可以點</b>，換成你自己想帶的那件（上排＝上衣、中排＝下身、底排＝外搭）。</p>
+    ${gh}
+    <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
+      ${enough?`<button class="btn accent" style="flex:1;min-width:150px" onclick="grid9Combos()">🎲 幫我把這幾件配成組合</button>`:''}
+      <button class="btn ghost" onclick="grid9FromCloset()">🔄 自動換一批</button>
+      <button class="btn ghost" onclick="grid9Blank()">🧹 全部清空自己挑</button>
     </div>
     <div id="g9combos"></div>`;
+}
+/* 點某一格 → 就地列出「該格類別」的衣櫃清單挑一件（同一彈窗內切換，不疊窗） */
+function g9EditCell(r,c){
+  const cell=window._g9grid[r][c],cat=cell.cat,cur=cell.it;
+  const {tmin,tmax}=g9Temp();
+  const types=G9CAT[cat].types;
+  const pool=ITEMS.filter(x=>types.includes(x.type)).slice().sort((a,b)=>
+    (tempOverlap(b,tmin,tmax)?1:0)-(tempOverlap(a,tmin,tmax)?1:0)
+    ||(b.fav?1:0)-(a.fav?1:0)||(a.wearCount||0)-(b.wearCount||0));
+  const list=pool.length?pool.map(it=>`
+    <div class="outfitcard" onclick="g9SetCell(${r},${c},'${it.id}')">
+      <div class="thumbs"><img src="${urlCache.get(it)}"></div>
+      <div style="flex:1;min-width:0"><b>${esc((it.colorName||'')+(it.name||it.type))}</b>
+        ${(tmin!=null&&!tempOverlap(it,tmin,tmax))?`<div class="hint" style="margin:0">⚠ 適穿溫度和這趟不太合</div>`:''}</div>
+      <span class="tag">${cur&&cur.id===it.id?'目前 ✓':'選這件 →'}</span></div>`).join('')
+    :`<div class="warnline">衣櫃裡還沒有「${cat}」類的衣物。先到「衣櫃」加幾件再回來挑。</div>`;
+  $('g9body').innerHTML=`
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <b style="font-size:13.5px">挑一件「${cat}」放進這一格</b>
+      <button class="btn ghost" onclick="g9Render()">← 返回九宮格</button></div>
+    ${cur?`<button class="btn ghost" style="width:100%;margin-bottom:6px" onclick="g9SetCell(${r},${c},'')">🗑️ 清空這一格</button>`:''}
+    <div class="picklist">${list}</div>`;
+}
+function g9SetCell(r,c,id){
+  if(!window._g9grid)return;
+  window._g9grid[r][c].it=id?itemById(id):null;
+  g9Render();
 }
 function grid9FromScratch(){
   const idx={'上衣':0,'下身':0,'外搭':0};
