@@ -196,7 +196,7 @@ select{max-width:100%}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>👗 衣櫃穿搭 <span class="tag">v1.6</span></h1>
+    <h1>👗 衣櫃穿搭 <span class="tag">v1.9</span></h1>
     <span class="sub">出國打包選衣 × 日常穿搭 · 資料只存在這台裝置</span>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -410,6 +410,14 @@ function sizePick(btn,inputId,s){
   if(inp.value===s){inp.value='';btn.classList.remove('on')}
   else{inp.value=s;[...btn.parentElement.children].forEach(b=>b.classList.remove('on'));btn.classList.add('on')}
 }
+/* 品牌自動跳字：把打過的品牌收集起來做 <datalist>，手機不用重打 */
+function allBrands(){
+  const s=new Set();ITEMS.forEach(it=>{const b=(it.brand||'').trim();if(b)s.add(b)});
+  return [...s].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+}
+function brandDatalistHtml(listId){
+  return `<datalist id="${listId}">${allBrands().map(b=>`<option value="${esc(b)}">`).join('')}</datalist>`;
+}
 
 /* =====================================================================
    分頁 1：衣櫃
@@ -535,7 +543,7 @@ function addTagModal(draft){
       ${sizeChipsHtml('adSize',d.size)}</div>
     <div class="row" style="margin:6px 0 12px">
       <label class="field">名稱（可空白）<input type="text" id="adName" placeholder="例：深藍直條紋襯衫" value="${esc(d.name)}"></label>
-      <label class="field">品牌<input type="text" id="adBrand" style="min-width:90px" value="${esc(d.brand)}"></label>
+      <label class="field">品牌<input type="text" id="adBrand" list="adBrandList" autocomplete="off" style="min-width:90px" value="${esc(d.brand)}">${brandDatalistHtml('adBrandList')}</label>
       <label class="field">自訂尺寸<input type="text" id="adSize" style="min-width:60px;width:70px" value="${esc(d.size)}"></label>
       <label class="switch"><input type="checkbox" id="adFav" ${d.fav?'checked':''}>⭐ 最愛</label>
     </div>
@@ -618,7 +626,10 @@ function openItem(id){
     <h2>${esc(it.name||it.type)}
       ${it.cut?'<span class="badge auto">已去背</span>':'<span class="badge manual">原圖</span>'}</h2>
     <img class="pv" src="${url}">
-    <div class="row" style="margin:10px 0">
+    <div class="row" style="margin:10px 0 4px">
+      <button class="btn accent" style="flex:1" onclick="pairItemModal('${it.id}')">✨ 幫這件配（找搭配）</button>
+    </div>
+    <div class="row" style="margin:6px 0 10px">
       ${it.photo&&!it.cut?`<button class="btn accent sm" onclick="bgSingle('${it.id}')">🪄 自動去背</button>`:''}
       ${it.cut?`<button class="btn ghost sm" onclick="itemEditCut('${it.id}')">🧽 修去背（擦手/衣架）</button>`:''}
       ${it.cut&&it.photo?`<button class="btn ghost sm" onclick="itemDropOrig('${it.id}')">刪原圖省空間</button>`:''}
@@ -640,10 +651,11 @@ function openItem(id){
         <span class="rangewrap"><input type="number" id="itTmin" value="${it.tempMin}"> ～
           <input type="number" id="itTmax" value="${it.tempMax}"></span></label>
       <label class="switch"><input type="checkbox" id="itFav" ${it.fav?'checked':''}>⭐ 最愛</label>
+      <label class="switch" title="旅程自動排時，這件整趟只會被排到一天，不重複穿"><input type="checkbox" id="itOnce" ${it.onceOnly?'checked':''}>✨ 只穿一次</label>
     </div>
     <div><b style="font-size:13px;color:var(--muted)">尺寸</b>${sizeChipsHtml('itSize',it.size)}</div>
     <div class="row" style="margin-bottom:8px">
-      <label class="field">品牌<input type="text" id="itBrand" value="${esc(it.brand)}" style="min-width:100px"></label>
+      <label class="field">品牌<input type="text" id="itBrand" list="itBrandList" autocomplete="off" value="${esc(it.brand)}" style="min-width:100px">${brandDatalistHtml('itBrandList')}</label>
       <label class="field">自訂尺寸<input type="text" id="itSize" value="${esc(it.size)}" style="min-width:60px;width:80px"></label>
       <label class="field">穿著次數
         <span class="rangewrap">
@@ -675,7 +687,7 @@ async function itemSave(id){
   it.formality=+$('itFormality').value;
   it.tempMin=+$('itTmin').value;it.tempMax=+$('itTmax').value;
   if(it.tempMin>it.tempMax)[it.tempMin,it.tempMax]=[it.tempMax,it.tempMin];
-  it.fav=$('itFav').checked;it.brand=$('itBrand').value.trim();it.size=$('itSize').value.trim();
+  it.fav=$('itFav').checked;it.onceOnly=$('itOnce').checked;it.brand=$('itBrand').value.trim();it.size=$('itSize').value.trim();
   it.lastWorn=$('itLastWorn').value;it.notes=$('itNotes').value;
   await saveItem(it);closeModal();render();toast('已儲存');
 }
@@ -684,7 +696,8 @@ async function itemDelete(id){await removeItem(id);
     o.layout=(o.layout||[]).filter(l=>l.itemId!==id);saveOutfit(o)}});
   TRIPS.forEach(t=>{let ch=false;
     (t.days||[]).forEach(d=>{if(d.autoItems&&d.autoItems.includes(id)){
-      d.autoItems=d.autoItems.filter(x=>x!==id);ch=true}});
+      d.autoItems=d.autoItems.filter(x=>x!==id);ch=true}
+      if(d.pinItem===id){d.pinItem=null;ch=true}});
     if(ch)saveTrip(t)});
   closeModal();render();toast('已刪除')}
 async function itemDropOrig(id){const it=itemById(id);
@@ -875,9 +888,10 @@ async function editCutOpen(blob,onDone,onCancel,origBlob){
   const origBmp=origBlob?await createImageBitmap(origBlob):null;
   openModal(`
     <h2>🧽 修圖</h2>
-    <p class="hint">「擦除」塗掉不要的（手、衣架、殘留背景）；${origBmp?'「補回」把被誤吃掉的衣服刷回來；':''}擦壞了按「全部重來」。</p>
+    <p class="hint">手＋衣架通常在上方 → 用「▭ 框選擦」<b>拖一個框一次擦掉</b>最快；細節再用「🖌 塗抹擦」；${origBmp?'誤刪的衣服用「🩹 補回」刷回來；':''}擦壞按「全部重來」。</p>
     <div class="subtabs" style="margin-bottom:8px">
-      <button class="subtab active" id="ecModeErase" onclick="ecSetMode('erase')">🧽 擦除</button>
+      <button class="subtab active" id="ecModeBox" onclick="ecSetMode('box')">▭ 框選擦</button>
+      <button class="subtab" id="ecModeErase" onclick="ecSetMode('erase')">🖌 塗抹擦</button>
       ${origBmp?'<button class="subtab" id="ecModeRestore" onclick="ecSetMode(\'restore\')">🩹 補回</button>':''}
     </div>
     <canvas id="ecCanvas" style="width:100%;max-height:52vh;touch-action:none;border:1px solid var(--line);
@@ -896,11 +910,11 @@ async function editCutOpen(blob,onDone,onCancel,origBlob){
   /* 顯示大小由 CSS 控制；內部維持原解析度 */
   const ctx=c.getContext('2d');
   ctx.drawImage(bmp,0,0);
-  ecState={c,ctx,bmp,origBmp,onDone,onCancel,down:false,mode:'erase'};
+  ecState={c,ctx,bmp,origBmp,onDone,onCancel,down:false,mode:'box',snap:null,boxStart:null};
+  const xyOf=e=>{const r=c.getBoundingClientRect();const sx=c.width/r.width,sy=c.height/r.height;
+    return{sx,sy,x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy}};
   const brushAt=e=>{
-    const r=c.getBoundingClientRect();
-    const sx=c.width/r.width,sy=c.height/r.height;
-    const x=(e.clientX-r.left)*sx,y=(e.clientY-r.top)*sy;
+    const {sx,sy,x,y}=xyOf(e);
     const rad=(+$('ecBrush').value||26)*Math.max(sx,sy);
     ctx.save();
     if(ecState.mode==='restore'&&ecState.origBmp){
@@ -914,17 +928,30 @@ async function editCutOpen(blob,onDone,onCancel,origBlob){
     }
     ctx.restore();
   };
-  c.addEventListener('pointerdown',e=>{ecState.down=true;c.setPointerCapture(e.pointerId);brushAt(e);e.preventDefault()});
-  c.addEventListener('pointermove',e=>{if(ecState&&ecState.down)brushAt(e)});
-  c.addEventListener('pointerup',()=>{if(ecState)ecState.down=false});
-  c.addEventListener('pointercancel',()=>{if(ecState)ecState.down=false});
+  const snapshot=()=>{const s=document.createElement('canvas');s.width=c.width;s.height=c.height;
+    s.getContext('2d').drawImage(c,0,0);return s};
+  const boxRect=e=>{const {x,y}=xyOf(e);const b=ecState.boxStart;
+    return[Math.min(b.x,x),Math.min(b.y,y),Math.abs(x-b.x),Math.abs(y-b.y)]};
+  const boxPreview=e=>{ctx.drawImage(ecState.snap,0,0);
+    ctx.save();ctx.strokeStyle='#2c6e7f';ctx.lineWidth=Math.max(2,c.width/200);ctx.setLineDash([9,6]);
+    ctx.strokeRect(...boxRect(e));ctx.restore()};
+  const boxCommit=e=>{ctx.drawImage(ecState.snap,0,0);
+    ctx.save();ctx.globalCompositeOperation='destination-out';ctx.fillRect(...boxRect(e));ctx.restore()};
+  c.addEventListener('pointerdown',e=>{ecState.down=true;c.setPointerCapture(e.pointerId);
+    if(ecState.mode==='box'){ecState.snap=snapshot();ecState.boxStart=xyOf(e)}else brushAt(e);e.preventDefault()});
+  c.addEventListener('pointermove',e=>{if(!ecState||!ecState.down)return;
+    if(ecState.mode==='box'){if(ecState.snap)boxPreview(e)}else brushAt(e)});
+  c.addEventListener('pointerup',e=>{if(!ecState)return;
+    if(ecState.mode==='box'&&ecState.down&&ecState.snap){boxCommit(e);ecState.snap=null;ecState.boxStart=null}
+    ecState.down=false});
+  c.addEventListener('pointercancel',()=>{if(!ecState)return;ecState.down=false;
+    if(ecState.snap){ctx.drawImage(ecState.snap,0,0);ecState.snap=null;ecState.boxStart=null}});
 }
 function ecSetMode(m){
   if(!ecState)return;
-  ecState.mode=m;
-  const eb=$('ecModeErase'),rb=$('ecModeRestore');
-  if(eb)eb.classList.toggle('active',m==='erase');
-  if(rb)rb.classList.toggle('active',m==='restore');
+  ecState.mode=m;ecState.snap=null;ecState.boxStart=null;
+  const set=(id,on)=>{const el=$(id);if(el)el.classList.toggle('active',on)};
+  set('ecModeBox',m==='box');set('ecModeErase',m==='erase');set('ecModeRestore',m==='restore');
 }
 function ecRestore(){
   if(!ecState)return;
@@ -1081,10 +1108,14 @@ function pickWeighted(arr,n){ /* 依分數帶隨機抽 n 個候選 */
 function genCombo(opt){
   opt=opt||{};
   const usage=opt.usage||null;
-  const limitOf=t=>TOP_TYPES.includes(t)||t==='洋裝'?(+SET.washTop||1)
-    :BOTTOM_TYPES.includes(t)?(+SET.washBottom||3):999;
-  const avail=it=>tempOverlap(it,opt.tempMin,opt.tempMax)
-    &&(!usage||(usage.get(it.id)||0)<limitOf(it.type))
+  /* 每件可穿幾天上限：標「只穿一次」或被指定為某天特殊單品的，整趟只排 1 天 */
+  const onceIds=opt.onceIds||null;
+  const limitOf=it=>(it.onceOnly||(onceIds&&onceIds.has(it.id)))?1
+    :(TOP_TYPES.includes(it.type)||it.type==='洋裝')?(+SET.washTop||1)
+    :BOTTOM_TYPES.includes(it.type)?(+SET.washBottom||3):999;
+  const anchor=opt.anchorId?itemById(opt.anchorId):null;
+  const avail=it=>it!==anchor&&tempOverlap(it,opt.tempMin,opt.tempMax)
+    &&(!usage||(usage.get(it.id)||0)<limitOf(it))
     &&(!opt.season||!(it.seasons||[]).length||(it.seasons||[]).includes(opt.season));
   const tops=ITEMS.filter(x=>TOP_TYPES.includes(x.type)&&avail(x));
   const bottoms=ITEMS.filter(x=>BOTTOM_TYPES.includes(x.type)&&avail(x));
@@ -1093,16 +1124,27 @@ function genCombo(opt){
   const needOuter=opt.tempMin!=null&&opt.tempMin<=18&&outers.length>0;
   const cands=[];
   const tryPush=(items)=>{if(items.every(Boolean))cands.push({items,score:comboScore(items,opt)})};
-  /* 上衣＋下身組合 */
-  for(const t of tops)for(const b of bottoms){
-    const base=[t,b];
-    if(needOuter){for(const o of outers)tryPush([...base,o])}
-    else tryPush(base);
-  }
-  /* 洋裝路線 */
-  for(const d of dresses){
-    if(needOuter){for(const o of outers)tryPush([d,o])}
-    else tryPush([d]);
+  if(anchor){
+    /* 指定「這件一定要出現」：以它為主軸湊一套（特殊場合／拍單品指定） */
+    const at=anchor.type;
+    if(TOP_TYPES.includes(at)){for(const b of bottoms){if(needOuter)for(const o of outers)tryPush([anchor,b,o]);else tryPush([anchor,b])}}
+    else if(BOTTOM_TYPES.includes(at)){for(const tp of tops){if(needOuter)for(const o of outers)tryPush([tp,anchor,o]);else tryPush([tp,anchor])}}
+    else if(at==='洋裝'){if(needOuter)for(const o of outers)tryPush([anchor,o]);else tryPush([anchor])}
+    else if(at==='外套'){for(const tp of tops)for(const b of bottoms)tryPush([tp,b,anchor]);for(const d of dresses)tryPush([d,anchor])}
+    else{for(const tp of tops)for(const b of bottoms)tryPush([tp,b,anchor]);for(const d of dresses)tryPush([d,anchor])}
+    if(!cands.length)tryPush([anchor]); /* 湊不出來就至少單穿這件 */
+  }else{
+    /* 上衣＋下身組合 */
+    for(const t of tops)for(const b of bottoms){
+      const base=[t,b];
+      if(needOuter){for(const o of outers)tryPush([...base,o])}
+      else tryPush(base);
+    }
+    /* 洋裝路線 */
+    for(const d of dresses){
+      if(needOuter){for(const o of outers)tryPush([d,o])}
+      else tryPush([d]);
+    }
   }
   if(!cands.length)return null;
   cands.sort((a,b)=>b.score-a.score);
@@ -1162,6 +1204,83 @@ function autoFitAdopt(i){
   let n=0;
   for(const it of items){
     fitEdit.layout.push({itemId:it.id,x:8+(n%3)*30,y:4+Math.floor(n/3)*30,w:34,z:n+1});n++}
+  fitEditor();
+}
+
+/* ---------------- ✨ 幫「這一件」配（拍單品 → 從衣櫃挑能搭的） ----------------
+   不用先建整個衣櫃：拍你想穿的那件，用現有的其他衣物湊出完整一套。
+   湊不出來就誠實說缺什麼，並提供「看別人怎麼搭這件」。 */
+function pairSuggest(anchor,opt){
+  opt=opt||{};
+  const avail=it=>it.id!==anchor.id&&tempOverlap(it,opt.tempMin,opt.tempMax);
+  const tops=ITEMS.filter(x=>TOP_TYPES.includes(x.type)&&avail(x));
+  const bottoms=ITEMS.filter(x=>BOTTOM_TYPES.includes(x.type)&&avail(x));
+  const dresses=ITEMS.filter(x=>x.type==='洋裝'&&avail(x));
+  const outers=ITEMS.filter(x=>x.type==='外套'&&avail(x));
+  const needOuter=opt.tempMin!=null&&opt.tempMin<=18&&outers.length>0;
+  const cands=[],missing=[];
+  const push=items=>{if(items.every(Boolean))cands.push({items,score:comboScore(items,opt)})};
+  const t=anchor.type;
+  if(TOP_TYPES.includes(t)){
+    if(!bottoms.length)missing.push('下身（褲子／裙子）');
+    for(const b of bottoms){if(needOuter)for(const o of outers)push([anchor,b,o]);else push([anchor,b])}
+  }else if(BOTTOM_TYPES.includes(t)){
+    if(!tops.length)missing.push('上衣');
+    for(const tp of tops){if(needOuter)for(const o of outers)push([tp,anchor,o]);else push([tp,anchor])}
+  }else if(t==='洋裝'){
+    if(needOuter)for(const o of outers)push([anchor,o]);else push([anchor]);
+  }else if(t==='外套'){
+    if(!(tops.length&&bottoms.length)&&!dresses.length)missing.push('一套內搭（上衣＋下身，或洋裝）');
+    for(const tp of tops)for(const b of bottoms)push([tp,b,anchor]);
+    for(const d of dresses)push([d,anchor]);
+  }else{ /* 鞋/包/配件 → 主體一套＋這件 */
+    if(!(tops.length&&bottoms.length)&&!dresses.length)missing.push('一套主體（上衣＋下身，或洋裝）');
+    for(const tp of tops)for(const b of bottoms){if(needOuter)for(const o of outers)push([tp,b,o,anchor]);else push([tp,b,anchor])}
+    for(const d of dresses)push([d,anchor]);
+  }
+  cands.sort((a,b)=>b.score-a.score);
+  const seen=new Set(),out=[];
+  for(const c of cands){const k=c.items.map(x=>x.id).sort().join('|');if(seen.has(k))continue;seen.add(k);out.push(c.items);if(out.length>=6)break}
+  return{combos:out,missing};
+}
+function pairItemModal(id){
+  const anchor=itemById(id);if(!anchor)return;
+  const{combos,missing}=pairSuggest(anchor,{});
+  window._pairCombos=combos;window._pairAnchor=id;
+  openModal(`
+    <button class="close" onclick="openItem('${id}')">✕</button>
+    <h2>✨ 幫「${esc(anchor.name||anchor.type)}」配</h2>
+    ${combos.length?`<p class="hint">從你衣櫃裡挑能搭的（規則式：溫度／正式度／色彩不打架），點一套可存成搭配：</p>
+      <div class="picklist">${combos.slice(0,4).map((items,i)=>{
+        const others=items.filter(x=>x.id!==anchor.id);
+        return `<div class="outfitcard" onclick="pairAdopt(${i})">
+          <div class="thumbs">${items.slice(0,4).map(it=>`<img src="${urlCache.get(it)}">`).join('')}</div>
+          <div style="flex:1;min-width:0"><b>＋ ${esc(others.map(x=>(x.colorName||'')+(x.name||x.type)).join('、'))||'（單穿）'}</b>
+            <div style="font-size:12px;color:var(--muted)">含你這件 ${esc(anchor.name||anchor.type)}</div></div>
+          <span class="tag">存成搭配 →</span></div>`}).join('')}</div>`
+      :`<div class="warnline">衣櫃裡目前<b>配不出完整一套</b>${missing.length?`——還缺：${esc(missing.join('、'))}`:''}。
+        先加幾件能搭的，或看看下面別人怎麼搭這件 👇</div>`}
+    <div class="divider"></div>
+    <b style="font-size:13.5px">🔍 找這件的參考穿搭（別人怎麼搭）</b>
+    <div class="row" style="margin-top:8px">
+      <button class="btn ghost sm" onclick="pairInspo('${id}','pinterest')">Pinterest</button>
+      <button class="btn ghost sm" onclick="pairInspo('${id}','wear')">WEAR</button>
+    </div>`);
+}
+function pairInspo(id,site){
+  const it=itemById(id);if(!it)return;
+  const kw=((it.colorName||'')+(it.name||it.type)+' 穿搭').trim();
+  const url=site==='pinterest'?'https://www.pinterest.com/search/pins/?q='+encodeURIComponent(kw)
+    :'https://wear.jp/search/?keyword='+encodeURIComponent(kw);
+  window.open(url,'_blank');
+}
+function pairAdopt(i){
+  const items=window._pairCombos[i];if(!items)return;
+  fitEdit={id:uid(),name:'',itemIds:items.map(x=>x.id),layout:[],scenes:[],
+    conditions:{bike:false},transition:{removable:'',addable:''},
+    notes:'',wearDates:[],createdAt:todayStr(),_isNew:true};
+  let n=0;
+  for(const it of items){fitEdit.layout.push({itemId:it.id,x:8+(n%3)*30,y:4+Math.floor(n/3)*30,w:34,z:n+1});n++}
   fitEditor();
 }
 async function fitWearToday(oid){
@@ -1552,7 +1671,7 @@ function vTripDetail(t){
     <p class="hint">${fmtDate(t.startDate)} ～ ${fmtDate(t.endDate)} · 共 ${t.days.length} 天 · 已配 ${doneN} 天
       ${t.homeCity?` · 出發地：${esc(t.homeCity)}`:''}
       ${t.lat==null?'<br>⚠️ 這個旅程沒設定城市座標，抓不了預報；可每天手動輸入溫度。':''}</p>
-    <p class="hint">自動排規則（設定頁可調）：上衣類穿 ${+SET.washTop||1} 天要洗、褲裙可穿 ${+SET.washBottom||3} 天、外套整趟重複；同件會跨天重新組合。</p>
+    <p class="hint">自動排規則（設定頁可調）：上衣類穿 ${+SET.washTop||1} 天要洗、褲裙可穿 ${+SET.washBottom||3} 天、外套整趟重複；同件會跨天重新組合。標「✨ 只穿一次」的單品整趟只排一天；某天有特殊場合可在「調整」裡指定一件。</p>
     <div id="tripDays">
     ${t.days.map((d,i)=>{
       const o=d.outfitId?OUTFITS.find(x=>x.id===d.outfitId):null;
@@ -1565,7 +1684,7 @@ function vTripDetail(t){
           ${d.precip!=null?` 💧${d.precip}%`:''}${d.manual?' <span class="chip">手動</span>':''}</span>
         <button class="icon" onclick="tripDayTemp('${t.id}',${i})">輸溫度</button>
         ${its.length?`<span style="flex:1;min-width:120px">
-            ${o?`<b style="font-size:13.5px">${esc(o.name||'搭配')}</b>`:'<span class="badge auto">自動</span>'}
+            ${o?`<b style="font-size:13.5px">${esc(o.name||'搭配')}</b>`:`<span class="badge auto">自動</span>${d.pinItem?' <span class="badge manual">⭐指定</span>':''}`}
             <span class="thumbs">${its.slice(0,4).map(x=>`<img src="${urlCache.get(x)}" style="width:30px;height:38px;object-fit:contain;border:1px solid var(--line);border-radius:4px;background:#fff;vertical-align:middle">`).join('')}</span></span>
           ${auto?`<button class="icon" onclick="tripAutoDayMenu('${t.id}',${i})">調整</button>`
                :`<button class="icon" onclick="tripPickOutfit('${t.id}',${i})">改配</button>`}`
@@ -1584,10 +1703,22 @@ async function tripAutoSchedule(tid){
   const usage=new Map();
   t.days.forEach(d=>{if(d.outfitId){dayItems(d).forEach(it=>
     usage.set(it.id,(usage.get(it.id)||0)+1))}});
+  /* 被指定為某天特殊單品的，整趟只穿那一天，其餘天要避開 */
+  const onceIds=new Set(t.days.filter(d=>d.pinItem).map(d=>d.pinItem));
   let filled=0,failed=0;
+  /* 先排「這天指定特殊單品」的天，把那件鎖進去 */
   for(const d of t.days){
-    if(d.outfitId)continue; /* 手動配的不動 */
-    const items=genCombo({tempMin:d.tempMin,tempMax:d.tempMax,usage});
+    if(d.outfitId||!d.pinItem)continue;
+    const items=genCombo({tempMin:d.tempMin,tempMax:d.tempMax,usage,anchorId:d.pinItem,onceIds});
+    if(!items){d.autoItems=null;failed++;continue}
+    d.autoItems=items.map(x=>x.id);
+    items.forEach(it=>usage.set(it.id,(usage.get(it.id)||0)+1));
+    filled++;
+  }
+  /* 再排其餘天（重穿規則＋只穿一次＋指定單品避開，都在 genCombo 內處理） */
+  for(const d of t.days){
+    if(d.outfitId||d.pinItem)continue; /* 手動配的、已指定特殊單品的不動 */
+    const items=genCombo({tempMin:d.tempMin,tempMax:d.tempMax,usage,onceIds});
     if(!items){d.autoItems=null;failed++;continue}
     d.autoItems=items.map(x=>x.id);
     items.forEach(it=>usage.set(it.id,(usage.get(it.id)||0)+1));
@@ -1607,8 +1738,10 @@ function tripAutoDayMenu(tid,i){
     <div class="row" style="margin-bottom:10px">${its.map(x=>
       `<img src="${urlCache.get(x)}" style="width:64px;height:82px;object-fit:contain;border:1px solid var(--line);border-radius:6px;background:#fff">`).join('')}</div>
     <p class="hint">${its.map(x=>esc((x.colorName||'')+(x.name||x.type))).join('、')}</p>
+    ${d.pinItem?`<div class="warnline">⭐ 這天指定了特殊單品：<b>${esc((itemById(d.pinItem)||{}).name||(itemById(d.pinItem)||{}).type||'（已刪除）')}</b>——整趟只安排這一天。</div>`:''}
     <div class="stack">
-      <button class="btn accent" onclick="tripAutoReday('${tid}',${i})">🎲 這天重排一套</button>
+      <button class="btn accent" onclick="tripAutoReday('${tid}',${i})">🎲 這天重排一套${d.pinItem?'（保留指定那件）':''}</button>
+      <button class="btn ghost" onclick="tripPinDay('${tid}',${i})">⭐ ${d.pinItem?'換／取消':'指定一件'}特殊單品（特殊場合）</button>
       <button class="btn ghost" onclick="tripAutoToOutfit('${tid}',${i})">存成正式搭配（可進畫布調）</button>
       <button class="btn ghost" onclick="tripPickOutfit('${tid}',${i})">改成手動選一套</button>
       <button class="btn danger" onclick="tripAutoClear('${tid}',${i})">清除這天</button>
@@ -1619,10 +1752,39 @@ async function tripAutoReday(tid,i){
   const usage=new Map();
   t.days.forEach((dd,k)=>{if(k!==i)dayItems(dd).forEach(it=>
     usage.set(it.id,(usage.get(it.id)||0)+1))});
-  const items=genCombo({tempMin:d.tempMin,tempMax:d.tempMax,usage});
+  const items=genCombo({tempMin:d.tempMin,tempMax:d.tempMax,usage,anchorId:d.pinItem||null});
   if(!items){toast('配不出新的一套（重穿規則下衣物不夠）');return}
   d.autoItems=items.map(x=>x.id);
   await saveTrip(t);closeModal();render();
+}
+/* ⭐ 這天指定一件特殊單品（例如某天婚禮／大餐要穿的洋裝） */
+function tripPinDay(tid,i){
+  const t=TRIPS.find(x=>x.id===tid);const d=t.days[i];
+  if(!ITEMS.length){toast('衣櫃還沒有衣物');return}
+  openModal(`
+    <button class="close" onclick="tripAutoDayMenu('${tid}',${i})">✕</button>
+    <h2>⭐ ${fmtDate(d.date)} 指定一件</h2>
+    <p class="hint">選一件想在這天穿的（例如洋裝或特別的一件），系統會以它為主搭一套，且整趟只安排這一天。</p>
+    <div class="itemgrid">${ITEMS.map(it=>`
+      <div class="itemcard" style="${d.pinItem===it.id?'outline:3px solid var(--accent)':''}" onclick="tripSetPin('${tid}',${i},'${it.id}')">
+        <img class="ph" src="${urlCache.get(it)}" loading="lazy">
+        <div class="nm">${esc(it.name||it.type)}</div>
+        <div class="meta">${esc(it.type)}${it.onceOnly?' · 只穿一次':''}</div>
+      </div>`).join('')}</div>
+    ${d.pinItem?`<div class="row" style="margin-top:12px"><button class="btn ghost" onclick="tripSetPin('${tid}',${i},'')">取消指定這天</button></div>`:''}`);
+}
+async function tripSetPin(tid,i,itemId){
+  const t=TRIPS.find(x=>x.id===tid);const d=t.days[i];
+  d.pinItem=itemId||null;
+  if(itemId){
+    const usage=new Map();
+    t.days.forEach((dd,k)=>{if(k!==i&&(dd.outfitId||dd.autoItems))dayItems(dd).forEach(it=>
+      usage.set(it.id,(usage.get(it.id)||0)+1))});
+    const items=genCombo({tempMin:d.tempMin,tempMax:d.tempMax,usage,anchorId:itemId});
+    d.autoItems=items?items.map(x=>x.id):[itemId];
+  }
+  await saveTrip(t);closeModal();render();
+  toast(itemId?'已指定這天的特殊單品':'已取消指定');
 }
 async function tripAutoToOutfit(tid,i){
   const t=TRIPS.find(x=>x.id===tid);const d=t.days[i];
@@ -1636,7 +1798,7 @@ async function tripAutoToOutfit(tid,i){
   await saveTrip(t);closeModal();render();toast('已存成搭配並指定給這天');
 }
 async function tripAutoClear(tid,i){
-  const t=TRIPS.find(x=>x.id===tid);t.days[i].autoItems=null;
+  const t=TRIPS.find(x=>x.id===tid);t.days[i].autoItems=null;t.days[i].pinItem=null;
   await saveTrip(t);closeModal();render();
 }
 function tripDayTemp(tid,i){
