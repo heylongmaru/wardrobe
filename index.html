@@ -196,7 +196,7 @@ select{max-width:100%}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>👗 衣櫃穿搭 <span class="tag">v1.9</span></h1>
+    <h1>👗 衣櫃穿搭 <span class="tag">v2.0</span></h1>
     <span class="sub">出國打包選衣 × 日常穿搭 · 資料只存在這台裝置</span>
   </header>
   <nav class="tabs" id="tabs"></nav>
@@ -888,17 +888,29 @@ async function editCutOpen(blob,onDone,onCancel,origBlob){
   const origBmp=origBlob?await createImageBitmap(origBlob):null;
   openModal(`
     <h2>🧽 修圖</h2>
-    <p class="hint">手＋衣架通常在上方 → 用「▭ 框選擦」<b>拖一個框一次擦掉</b>最快；細節再用「🖌 塗抹擦」；${origBmp?'誤刪的衣服用「🩹 補回」刷回來；':''}擦壞按「全部重來」。</p>
+    <p class="hint"><b>🪄 智慧擦：點一下</b>手／衣架／殘留背景，自動清掉相連的同色區塊——不用手指慢慢塗、也比較不會擦到衣服。
+      同色背景清不乾淨時改用「▭ 框選擦」拖一個框；細節用「🖌 塗抹擦」。<b>擦過頭按「↩️ 上一步」</b>就好，還能<b>雙指放大</b>再擦。</p>
     <div class="subtabs" style="margin-bottom:8px">
-      <button class="subtab active" id="ecModeBox" onclick="ecSetMode('box')">▭ 框選擦</button>
+      <button class="subtab active" id="ecModeMagic" onclick="ecSetMode('magic')">🪄 智慧擦</button>
+      <button class="subtab" id="ecModeBox" onclick="ecSetMode('box')">▭ 框選擦</button>
       <button class="subtab" id="ecModeErase" onclick="ecSetMode('erase')">🖌 塗抹擦</button>
       ${origBmp?'<button class="subtab" id="ecModeRestore" onclick="ecSetMode(\'restore\')">🩹 補回</button>':''}
     </div>
-    <canvas id="ecCanvas" style="width:100%;max-height:52vh;touch-action:none;border:1px solid var(--line);
-      border-radius:8px;background:repeating-conic-gradient(#f3f5f4 0 25%,#e9edeb 0 50%) 0 0/16px 16px"></canvas>
-    <div class="row" style="margin:10px 0;align-items:center">
+    <div id="ecWrap" style="overflow:hidden;border:1px solid var(--line);border-radius:8px;
+      background:repeating-conic-gradient(#f3f5f4 0 25%,#e9edeb 0 50%) 0 0/16px 16px">
+      <canvas id="ecCanvas" style="width:100%;max-height:52vh;touch-action:none;display:block"></canvas>
+    </div>
+    <div class="row" id="ecTolRow" style="margin:10px 0;align-items:center">
+      <label class="field" style="flex:1">智慧擦靈敏度（清不掉調高、吃到衣服調低）
+        <input type="range" id="ecTol" min="20" max="140" value="55" style="width:100%"></label>
+    </div>
+    <div class="row" id="ecBrushRow" style="margin:10px 0;align-items:center;display:none">
       <label class="field" style="flex:1">筆刷大小
         <input type="range" id="ecBrush" min="8" max="80" value="26" style="width:100%"></label>
+    </div>
+    <div class="row" style="margin:8px 0;align-items:center">
+      <button class="btn ghost sm" onclick="ecUndo()">↩️ 上一步</button>
+      <button class="btn ghost sm" onclick="ecZoomReset()">🔍 還原縮放</button>
       <button class="btn ghost sm" onclick="ecRestore()">全部重來</button>
     </div>
     <div class="row">
@@ -908,17 +920,21 @@ async function editCutOpen(blob,onDone,onCancel,origBlob){
   const c=$('ecCanvas');
   c.width=bmp.width;c.height=bmp.height;
   /* 顯示大小由 CSS 控制；內部維持原解析度 */
-  const ctx=c.getContext('2d');
+  const ctx=c.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(bmp,0,0);
-  ecState={c,ctx,bmp,origBmp,onDone,onCancel,down:false,mode:'box',snap:null,boxStart:null};
+  ecState={c,ctx,bmp,origBmp,onDone,onCancel,down:false,mode:'magic',snap:null,boxStart:null,
+    history:[],scale:1,tx:0,ty:0};
   const xyOf=e=>{const r=c.getBoundingClientRect();const sx=c.width/r.width,sy=c.height/r.height;
     return{sx,sy,x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy}};
+  const snapshot=()=>{const s=document.createElement('canvas');s.width=c.width;s.height=c.height;
+    s.getContext('2d').drawImage(c,0,0);return s};
+  const push=(snap)=>{ecState.history.push(snap||snapshot());if(ecState.history.length>14)ecState.history.shift()};
+  ecState._snapshot=snapshot;ecState._push=push;
   const brushAt=e=>{
     const {sx,sy,x,y}=xyOf(e);
     const rad=(+$('ecBrush').value||26)*Math.max(sx,sy);
     ctx.save();
     if(ecState.mode==='restore'&&ecState.origBmp){
-      /* 補回：以圓形裁切，把原圖畫回來 */
       ctx.globalCompositeOperation='source-over';
       ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.clip();
       ctx.drawImage(ecState.origBmp,0,0,c.width,c.height);
@@ -928,8 +944,32 @@ async function editCutOpen(blob,onDone,onCancel,origBlob){
     }
     ctx.restore();
   };
-  const snapshot=()=>{const s=document.createElement('canvas');s.width=c.width;s.height=c.height;
-    s.getContext('2d').drawImage(c,0,0);return s};
+  /* 🪄 智慧擦：從點到的像素向外「淹填」，把相連、顏色相近的整塊設成透明；碰到透明或不同色就停 */
+  const magicAt=e=>{
+    const {x,y}=xyOf(e);const W=c.width,H=c.height;
+    const px=Math.round(x),py=Math.round(y);
+    if(px<0||py<0||px>=W||py>=H)return;
+    const img=ctx.getImageData(0,0,W,H),d=img.data;
+    const s=(py*W+px)*4;
+    if(d[s+3]<8){toast('這裡已經是透明的，點在手或衣架上才有作用');return}
+    const sr=d[s],sg=d[s+1],sb=d[s+2];
+    const tol=+($('ecTol')||{}).value||55;const tol2=tol*tol;
+    const seen=new Uint8Array(W*H),stack=[py*W+px];seen[py*W+px]=1;let n=0;
+    while(stack.length){
+      const p=stack.pop(),i=p*4;
+      if(d[i+3]<8)continue;
+      const dr=d[i]-sr,dg=d[i+1]-sg,db=d[i+2]-sb;
+      if((dr*dr+dg*dg+db*db)>tol2*3)continue;
+      d[i+3]=0;n++;
+      const qx=p%W,qy=(p/W)|0;
+      if(qx>0&&!seen[p-1]){seen[p-1]=1;stack.push(p-1)}
+      if(qx<W-1&&!seen[p+1]){seen[p+1]=1;stack.push(p+1)}
+      if(qy>0&&!seen[p-W]){seen[p-W]=1;stack.push(p-W)}
+      if(qy<H-1&&!seen[p+W]){seen[p+W]=1;stack.push(p+W)}
+    }
+    ctx.putImageData(img,0,0);
+    if(n<25)toast('清掉的範圍很小 → 把「靈敏度」調高一點再點一次');
+  };
   const boxRect=e=>{const {x,y}=xyOf(e);const b=ecState.boxStart;
     return[Math.min(b.x,x),Math.min(b.y,y),Math.abs(x-b.x),Math.abs(y-b.y)]};
   const boxPreview=e=>{ctx.drawImage(ecState.snap,0,0);
@@ -937,25 +977,79 @@ async function editCutOpen(blob,onDone,onCancel,origBlob){
     ctx.strokeRect(...boxRect(e));ctx.restore()};
   const boxCommit=e=>{ctx.drawImage(ecState.snap,0,0);
     ctx.save();ctx.globalCompositeOperation='destination-out';ctx.fillRect(...boxRect(e));ctx.restore()};
-  c.addEventListener('pointerdown',e=>{ecState.down=true;c.setPointerCapture(e.pointerId);
-    if(ecState.mode==='box'){ecState.snap=snapshot();ecState.boxStart=xyOf(e)}else brushAt(e);e.preventDefault()});
-  c.addEventListener('pointermove',e=>{if(!ecState||!ecState.down)return;
-    if(ecState.mode==='box'){if(ecState.snap)boxPreview(e)}else brushAt(e)});
-  c.addEventListener('pointerup',e=>{if(!ecState)return;
-    if(ecState.mode==='box'&&ecState.down&&ecState.snap){boxCommit(e);ecState.snap=null;ecState.boxStart=null}
-    ecState.down=false});
-  c.addEventListener('pointercancel',()=>{if(!ecState)return;ecState.down=false;
-    if(ecState.snap){ctx.drawImage(ecState.snap,0,0);ecState.snap=null;ecState.boxStart=null}});
+  const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const ptrs=new Map();let gest=null;
+  c.addEventListener('pointerdown',e=>{
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.size===2){ /* 雙指 → 進入縮放/平移，取消進行中的擦 */
+      if(ecState.down){
+        if(ecState.snap){ctx.drawImage(ecState.snap,0,0);ecState.snap=null;ecState.boxStart=null}
+        else if(ecState.history.length){const h=ecState.history.pop();ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(h,0,0)}
+        ecState.down=false;
+      }
+      const pp=[...ptrs.values()];
+      gest={d:dist(pp[0],pp[1]),mx:(pp[0].x+pp[1].x)/2,my:(pp[0].y+pp[1].y)/2,scale:ecState.scale,tx:ecState.tx,ty:ecState.ty};
+      e.preventDefault();return;
+    }
+    c.setPointerCapture(e.pointerId);ecState.down=true;
+    if(ecState.mode==='box'){ecState.snap=snapshot();ecState.boxStart=xyOf(e)}
+    else if(ecState.mode==='magic'){push();magicAt(e);ecState.down=false}
+    else{push();brushAt(e)}
+    e.preventDefault();
+  });
+  c.addEventListener('pointermove',e=>{
+    if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(gest&&ptrs.size>=2){
+      const pp=[...ptrs.values()];
+      const nd=dist(pp[0],pp[1]),nmx=(pp[0].x+pp[1].x)/2,nmy=(pp[0].y+pp[1].y)/2;
+      let sc=gest.scale*(nd/(gest.d||1));sc=Math.max(1,Math.min(5,sc));
+      const cmx=(gest.mx-gest.tx)/gest.scale,cmy=(gest.my-gest.ty)/gest.scale;
+      ecState.scale=sc;ecState.tx=nmx-cmx*sc;ecState.ty=nmy-cmy*sc;
+      if(sc<=1.001){ecState.tx=0;ecState.ty=0}
+      ecApplyTransform();e.preventDefault();return;
+    }
+    if(!ecState||!ecState.down)return;
+    if(ecState.mode==='box'){if(ecState.snap)boxPreview(e)}
+    else if(ecState.mode==='erase'||ecState.mode==='restore')brushAt(e);
+  });
+  const endPtr=e=>{
+    if(ecState&&ecState.mode==='box'&&ecState.down&&ecState.snap){push(ecState.snap);boxCommit(e);ecState.snap=null;ecState.boxStart=null}
+    ptrs.delete(e.pointerId);if(ptrs.size<2)gest=null;
+    if(ecState)ecState.down=false;
+  };
+  c.addEventListener('pointerup',endPtr);
+  c.addEventListener('pointercancel',e=>{
+    if(ecState&&ecState.snap){ctx.drawImage(ecState.snap,0,0);ecState.snap=null;ecState.boxStart=null}
+    ptrs.delete(e.pointerId);if(ptrs.size<2)gest=null;if(ecState)ecState.down=false;
+  });
+  ecSetMode('magic');
+}
+function ecApplyTransform(){
+  if(!ecState)return;const c=ecState.c;
+  c.style.transformOrigin='0 0';
+  c.style.transform=`translate(${ecState.tx}px,${ecState.ty}px) scale(${ecState.scale})`;
+}
+function ecZoomReset(){if(!ecState)return;ecState.scale=1;ecState.tx=0;ecState.ty=0;ecApplyTransform()}
+function ecUndo(){
+  if(!ecState)return;
+  if(!ecState.history.length){toast('沒有可以還原的動作了');return}
+  const{ctx,c}=ecState;const s=ecState.history.pop();
+  ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(s,0,0);
 }
 function ecSetMode(m){
   if(!ecState)return;
   ecState.mode=m;ecState.snap=null;ecState.boxStart=null;
   const set=(id,on)=>{const el=$(id);if(el)el.classList.toggle('active',on)};
-  set('ecModeBox',m==='box');set('ecModeErase',m==='erase');set('ecModeRestore',m==='restore');
+  set('ecModeMagic',m==='magic');set('ecModeBox',m==='box');
+  set('ecModeErase',m==='erase');set('ecModeRestore',m==='restore');
+  const tolRow=$('ecTolRow'),brushRow=$('ecBrushRow');
+  if(tolRow)tolRow.style.display=m==='magic'?'flex':'none';
+  if(brushRow)brushRow.style.display=(m==='erase'||m==='restore')?'flex':'none';
 }
 function ecRestore(){
   if(!ecState)return;
   const{ctx,c,bmp}=ecState;
+  if(ecState._push)ecState._push();
   ctx.clearRect(0,0,c.width,c.height);
   ctx.drawImage(bmp,0,0);
 }
